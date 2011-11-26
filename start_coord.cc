@@ -6,6 +6,7 @@
 using namespace net04;
 using namespace net01;
 
+/* asdf */
 
 void start_coord(struct sockaddr_in *sin) {
 	coord c(sin);
