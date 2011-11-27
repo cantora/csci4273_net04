@@ -30,6 +30,11 @@ int main(int argc, char *argv[]) {
 	}
 	
 	id = strtol(argv[1], NULL, 10);
+	if(id < 1 || id > 255) {
+		printf("invalid node id %d. must be in the range of 1-255", id);
+		exit(1);
+	}
+
 	coord_port = strtol(argv[2], NULL, 10);
 	
 	if(argc == 4) {

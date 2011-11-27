@@ -5,6 +5,8 @@
 #include <string>
 #include <map>
 
+#include <set>
+
 extern "C" {
 #include <unistd.h>
 #include <sys/types.h> 
@@ -14,12 +16,29 @@ extern "C" {
 #include <arpa/inet.h>
 }
 
+#include "node.h"
 #include "thread_pool.h"
 
 namespace net04 {
 
 class coord {
 	public:
+
+		class edge {
+			public:
+			node::node_id_t n1;
+			node::node_id_t n2;
+			node::cost_t cost;
+
+			friend bool operator== (const edge &e1, const edge &e2) {
+				return (e1.n1 == e2.n1 && e1.n2 == e2.n2) || (e1.n2 == e2.n1 && e1.n1 == e2.n2);
+			}
+
+			friend bool operator!= (const edge &e1, const edge &e2) {return !(e1 == e2); }
+			friend bool operator< (const edge &e1, const edge &e2) { return &e1 < &e2; }
+
+		};
+
 		coord(struct sockaddr_in *sin);
 		~coord();
 
@@ -29,16 +48,24 @@ class coord {
 			return ntohs(m_sin->sin_port);
 		}
 
+		int add_edge(const edge &e);
 		
 	private:
-		void on_node_msg(int msglen, const char *msg, const struct sockaddr_in *sin);
+
+		void on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin);
+
+		void reply_net_size(node::node_id_t node_id);
+		void reply_ok(node::node_id_t node_id);
+		void reply_err(node::node_id_t node_id);
+		void reply_msg(node::node_id_t node_id, const char *buf, int buflen);
 
 		int m_socket;
 		struct sockaddr_in *const m_sin;
 
 		net02::thread_pool *const m_pool;
 
-		std::map<uint32_t, struct sockaddr_in> m_nodes;
+		std::map<node::node_id_t, struct sockaddr_in> m_nodes;
+		std::set<edge> m_edges;
 
 }; /* coord */
 

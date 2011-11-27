@@ -34,12 +34,21 @@ node::~node() {
 	close(m_coord_socket);
 }
 
+void node::send_coord_msg(const char *buf, int buflen) const {
+	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
+
+	assert(buflen >= sizeof(proto_coord::header_t) );
+
+	proto_coord::hton_hdr(reply);
+	proto_base::send_udp_msg(m_coord_socket, m_coord_addr, buflen, buf);
+}
+
 void node::request_coord_init() const {
 	proto_coord::header_t hdr;
 
-	proto_coord::request_coord_init(hdr, m_node_id);
+	proto_coord::request_coord_init(&hdr, m_node_id);
 
-	proto_base::send_udp_msg(m_coord_socket, m_coord_addr, sizeof(hdr), (char *)&hdr);
+	send_coord_msg((char *)&hdr, sizeof(hdr));
 }
 
 void node::listen_coord(void *instance) {

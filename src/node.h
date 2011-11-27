@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <string>
 #include <map>
+#include <cassert>
 
 extern "C" {
 #include <unistd.h>
@@ -32,6 +33,7 @@ class node {
 		
 	private:
 
+		void send_coord_msg(const char *buf, int buflen) const;
 		void request_coord_init() const;
 		void on_coord_msg(int msglen, const char *msg);
 
