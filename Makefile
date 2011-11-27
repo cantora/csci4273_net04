@@ -30,6 +30,9 @@ all: $(OBJECTS)
 start_coord: start_coord.cc $(OBJECTS)
 	$(CXX_CMD) $+ -o $@
 
+start_node: start_node.cc $(OBJECTS)
+	$(CXX_CMD) $+ -o $@
+
 $(BUILD)/%.o: src/%.cc src/%.h ./Makefile
 	$(CXX_CMD) $(DEP_FLAGS) -c $< -o $@
 

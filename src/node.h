@@ -20,17 +20,20 @@ namespace net04 {
 
 class node {
 	public:
+		typedef uint8_t node_id_t;
+		typedef uint8_t cost_t;
+		
 		node(node_id_t node_id, const struct sockaddr_in *coord_addr, 
 			struct sockaddr_in *coord_sin, struct sockaddr_in *dv_sin);
 		~node();
-
-		typedef node_id_t uint8_t;
-		typedef cost_t uint8_t;
 
 		static void listen_coord(void *instance);
 		static void listen_dv(void *instance);
 		
 	private:
+
+		void request_coord_init() const;
+		void on_coord_msg(int msglen, const char *msg);
 
 		const node_id_t m_node_id;
 

@@ -31,7 +31,8 @@ class coord {
 
 		
 	private:
-			
+		void on_node_msg(int msglen, const char *msg, const struct sockaddr_in *sin);
+
 		int m_socket;
 		struct sockaddr_in *const m_sin;
 

@@ -19,6 +19,8 @@
 
 namespace net04 {
 	void set_nonblocking(int fd);
+
+	void print_hex_bytes(const char *buf, int len);
 }
 
 #endif /* NET04_COMMON_H */

@@ -1,5 +1,5 @@
-#ifndef COORD_PROTO_H
-#define COORD_PROTO_H
+#ifndef PROTO_COORD_H
+#define PROTO_COORD_H
 
 #include <cerrno>
 #include <string>
@@ -12,14 +12,25 @@ extern "C" {
 
 namespace net04 {
 
-namespace coord_proto {
+namespace proto_coord {
 	
-	const int max_msg_len = 256;
-	struct header {
-		node_id_t 
+	static const int max_msg_len = 1024;
+	
+	static const uint16_t TYPE_REQ_INIT = 1;
+
+	static const char *type_str[] = {"none", "request_init"};
+
+	struct header_t {
+		uint16_t type;
+		uint16_t msg_len;		
+		node::node_id_t id;
 	};
 
-}; /* coord_proto */
+	void request_coord_init(header_t &hdr, node::node_id_t id);
+
+	uint16_t msg_type(const char *msg);
+
+}; /* proto_coord */
 
 }; /* net04 */
-#endif /* COORD_PROTO_H */
+#endif /* PROTO_COORD_H */
