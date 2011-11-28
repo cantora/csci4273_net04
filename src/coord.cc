@@ -138,6 +138,18 @@ int coord::add_edge(const edge &e) {
 	return ret.second;
 }
 
+bool coord::network_ready() const {
+	set<edge>::const_iterator it;
+
+	for(it = m_edges.begin(); it != m_edges.end(); it++) {
+		if( (m_nodes.find(it->n1) == m_nodes.end() ) || (m_nodes.find(it->n2) == m_nodes.end() ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /*int coord::add_edge(node::node_id_t n1, node::node_id_t n2) {
 	node::node_id_t nodes[2] = {n1, n2};
 	set<node::node_id_t> s(nodes, nodes+1);

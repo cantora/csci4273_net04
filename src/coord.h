@@ -48,8 +48,17 @@ class coord {
 			return ntohs(m_sin->sin_port);
 		}
 
+		unsigned short nodes() const {
+			return m_nodes.size();
+		}
+
+		unsigned short edges() const {
+			return m_edges.size();
+		}
+
 		int add_edge(const edge &e);
 		
+		bool network_ready() const;
 	private:
 
 		void on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin);
