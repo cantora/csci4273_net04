@@ -78,16 +78,16 @@ void coord::on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin) {
 	NET04_LOG("received %d byte '%s' message from %s:%d (%d): ", msglen, proto_coord::type_str[type], inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), node_id, sin->sin_addr );
 
 	if(m_nodes.count(node_id) > 0) {
-		NET04_LOG("%d already registered, reply with error.\n");
-		reply_err(node_id);
+		NET04_LOG("%d already registered, reply with error.\n", node_id);
+		reply_err(node_id, sin);
 		
 		return;
 	}
 	else {
 		m_nodes[node_id] = *sin;
 
-		NET04_LOG("reply ok (network size: %d)\n", m_nodes.size());
-		reply_ok(node_id);
+		NET04_LOG("reply reg_ack (network size: %d)\n", m_nodes.size());
+		reply_reg_ack(node_id);
 	}
 }
 
@@ -103,13 +103,13 @@ void coord::reply_net_size(node::node_id_t node_id) {
 	reply_msg(node_id, buf, sizeof(buf) );
 }
 
-void coord::reply_err(node::node_id_t node_id) {
+void coord::reply_err(node::node_id_t node_id, const struct sockaddr_in *sin) {
 	char buf[sizeof(proto_coord::header_t)];
 	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
 	
 	proto_coord::reply_err(reply);
 	
-	reply_msg(node_id, buf, sizeof(buf) );
+	reply_msg(node_id, buf, sizeof(buf), sin );
 }
 
 void coord::reply_ok(node::node_id_t node_id) {
@@ -121,13 +121,26 @@ void coord::reply_ok(node::node_id_t node_id) {
 	reply_msg(node_id, buf, sizeof(buf) );
 }
 
-void coord::reply_msg(node::node_id_t node_id, const char *buf, int buflen) {
+void coord::reply_reg_ack(node::node_id_t node_id) {
+	char buf[sizeof(proto_coord::header_t)];
 	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
+	
+	proto_coord::reply_reg_ack(reply);
+	
+	reply_msg(node_id, buf, sizeof(buf) );
+}
 
+void coord::reply_msg(node::node_id_t node_id, const char *buf, int buflen, const struct sockaddr_in *sin) {
+	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
+	
 	assert(buflen >= sizeof(proto_coord::header_t) );
+	
+	if(sin == NULL) {
+		sin = &m_nodes[node_id];
+	}
 
 	proto_coord::hton_hdr(reply);
-	proto_base::send_udp_msg(m_socket, &m_nodes[node_id], buflen, buf);
+	proto_base::send_udp_msg(m_socket, sin, buflen, buf);
 }
 
 int coord::add_edge(const edge &e) {

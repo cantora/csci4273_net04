@@ -56,6 +56,60 @@ void command_usage() {
 	printf("\tp NODE\t\t\t\tprint forwarding table of NODE\n");
 	printf("\ta\t\t\t\tprint forwarding table of all nodes\n");
 	printf("\ts NODE1 NODE2 DATA\t\tsend DATA message from NODE1 to NODE2\n");
+	printf("\th\t\t\t\tprint this message\n");
+}
+
+void do_cost_change(coord *c, const char *str) {
+	printf("do_cost_change\n");
+}
+
+void do_link_fail(coord *c, const char *str) {
+	printf("do_link_fail\n");
+}
+
+void do_print_table(coord *c, const char *str) {
+	printf("do_print_table\n");
+}
+
+void do_print_all_tables(coord *c, const char *str) {
+	printf("do_print_all_tables\n");
+}
+
+void do_send_message(coord *c, const char *str) {
+	printf("do_send_message\n");
+}
+
+void do_cmd(coord *c, const char *str) {
+	const char *p = str;
+	while(*p != 0x00 && *p == ' ') p++;
+ 
+	if(*p == 0x00 || *p == '\n') return;
+
+	switch(*p) {
+		case 'c' : 
+			do_cost_change(c, p);
+			break;
+		case 'f' : 
+			do_link_fail(c, p);
+			break;
+		case 'p' : 
+			do_print_table(c, p);
+			break;
+		case 'a' : 
+			do_print_all_tables(c, p);
+			break;
+		case 's' : 
+			do_send_message(c, p);
+			break;
+		case 'h' : 
+			command_usage();
+			break;
+		default :
+			printf("unknown command: %s", p);
+			return;
+	}
+
+	return;
 }
 
 void start_coord(struct sockaddr_in *sin, int argc, char *argv[]) {
@@ -103,6 +157,7 @@ void start_coord(struct sockaddr_in *sin, int argc, char *argv[]) {
 		}
 
 		//printf("command: %s\n", buf);
+		do_cmd(&c, buf);
 	}
 }
 

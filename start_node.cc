@@ -9,7 +9,9 @@ using namespace net01;
 void start_node(node::node_id_t node_id, struct sockaddr_in *coord_sin, struct sockaddr_in *dv_sin, struct sockaddr_in *coord_addr) {
 	node n(node_id, coord_addr, coord_sin, dv_sin);
 
-	usleep(500000);
+	while(1) {
+		usleep(100000);
+	}
 }
 
 void usage(int argc, char *argv[]) {

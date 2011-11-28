@@ -51,6 +51,8 @@ class node {
 
 		net02::thread_pool *const m_pool;
 
+		bool m_registered;
+
 }; /* node */
 
 }; /* net04 */

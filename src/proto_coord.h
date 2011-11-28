@@ -20,9 +20,11 @@ namespace proto_coord {
 	
 	static const uint16_t TYPE_ERR = 0;
 	static const uint16_t TYPE_REQ_INIT = 1;
-	static const uint16_t TYPE_NET_SIZE = (1 << 1);
-	static const uint16_t TYPE_OK = (1 << 2);
-	static const char *type_str[] = {"error", "request_init", "net_size", "ok"};
+	static const uint16_t TYPE_NET_SIZE = 2;
+	static const uint16_t TYPE_OK = 3;
+	static const uint16_t TYPE_REG_ACK = 4;
+
+	static const char *type_str[] = {"error", "request_init", "net_size", "ok", "reg_ack"};
 
 	struct header_t {
 		uint16_t type;
@@ -34,6 +36,7 @@ namespace proto_coord {
 	void reply_net_size(header_t *hdr);
 	void reply_err(header_t *hdr);
 	void reply_ok(header_t *hdr);
+	void reply_reg_ack(header_t *hdr);
 
 	void hton_hdr(header_t *hdr);
 	void ntoh_hdr(header_t *hdr);

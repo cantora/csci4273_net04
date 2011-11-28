@@ -26,6 +26,12 @@ void proto_coord::reply_ok(header_t *hdr) {
 	hdr->id = 0; /* coord gets node_id of zero */
 }
 
+void proto_coord::reply_reg_ack(header_t *hdr) {
+	hdr->type = TYPE_REG_ACK;
+	hdr->msg_len = 0;
+	hdr->id = 0; /* coord gets node_id of zero */
+}
+
 void proto_coord::hton_hdr(header_t *hdr) {
 	assert(sizeof(node::node_id_t) == 1 );
 

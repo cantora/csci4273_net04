@@ -65,8 +65,9 @@ class coord {
 
 		void reply_net_size(node::node_id_t node_id);
 		void reply_ok(node::node_id_t node_id);
-		void reply_err(node::node_id_t node_id);
-		void reply_msg(node::node_id_t node_id, const char *buf, int buflen);
+		void reply_err(node::node_id_t node_id, const struct sockaddr_in *sin);
+		void reply_reg_ack(node::node_id_t node_id);
+		void reply_msg(node::node_id_t node_id, const char *buf, int buflen, const struct sockaddr_in *sin = NULL);
 
 		int m_socket;
 		struct sockaddr_in *const m_sin;
