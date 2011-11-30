@@ -29,6 +29,17 @@ void net04::print_hex_bytes(const char *buf, int len) {
 	}
 }
 
+int net04::p_mutex_lock(pthread_mutex_t *mutex) {
+	int status;
+
+	status = pthread_mutex_lock(mutex);
+
+	if(status != 0) {
+		FATAL("lock error");
+	}
+
+	return status;
+}
 
 int net04::p_mutex_unlock(pthread_mutex_t *mutex) {
 	int status;
@@ -49,6 +60,17 @@ int net04::p_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
 
 	if(status != 0) {
 		FATAL("cond_wait error");
+	}
+
+	return status;
+}
+
+int net04::p_cond_signal(pthread_cond_t *cond) {
+	int status;
+	
+	status = pthread_cond_signal(cond);
+	if(status != 0) {
+		FATAL("cond_signal error");
 	}
 
 	return status;

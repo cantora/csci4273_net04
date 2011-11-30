@@ -85,8 +85,10 @@ class coord {
 		void on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin);
 		
 		void on_req_init(node_id_t node_id, const struct sockaddr_in *sin);
-		void on_tbl_info(node_id_t, proto_coord::header_t *hdr, int msglen, char *msg, const struct sockaddr_in *sin);
-		
+		void on_tbl_info(node_id_t, const char *buf, int buflen);
+
+		void print_tbl_upd_msg() const;
+
 		void send_table(node_id_t node_id) const;
 		void send_cost_change(const edge *e, node_id_t node_id) const;
 
@@ -111,6 +113,7 @@ class coord {
 		pthread_cond_t m_tbl_upd_cond;
 		bool m_tbl_upd;
 		char *m_tbl_upd_msg;
+		int m_tbl_upd_msg_len;
 
 
 }; /* coord */

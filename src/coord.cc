@@ -32,17 +32,18 @@ coord::~coord() {
 }
 
 void coord::print_table(node_id_t node_id) {
-	int status;
+	//int status;
 
-	status = pthread_mutex_trylock(&m_tbl_upd_mtx);
+	p_mutex_lock(&m_tbl_upd_mtx);
+	
+	/*status = pthread_mutex_trylock(&m_tbl_upd_mtx);
 	
 	if(status == EBUSY) {
 		FATAL("tbl_upd_mtx is already locked");
 	}
 	else if(status != 0) {
 		FATAL("mutex trylock error");
-	}
-	/* status == 0, we have a lock */
+	}*/
 	
 	m_tbl_upd = true;
 
@@ -51,6 +52,7 @@ void coord::print_table(node_id_t node_id) {
 	/* wait to receive signal that we got a reply from node_id about its table */
 	p_cond_wait(&m_tbl_upd_cond, &m_tbl_upd_mtx);
 	
+	//NETO4_LOG("received signal\n");
 	/* now we should have a non-null m_tbl_upd_msg */
 	if(m_tbl_upd_msg == NULL) {
 		FATAL("m_tbl_upd_msg is NULL");
@@ -58,10 +60,30 @@ void coord::print_table(node_id_t node_id) {
 	
 	NET04_LOG("got table update reply from node %d\n", node_id);
 
+	print_tbl_upd_msg();
+
 	m_tbl_upd = false;
-	delete m_tbl_upd_msg;
+	delete[] m_tbl_upd_msg;
 	m_tbl_upd_msg = NULL;
 	p_mutex_unlock(&m_tbl_upd_mtx);
+}
+
+void coord::print_tbl_upd_msg() const {
+	proto_coord::header_t *hdr;
+	proto_coord::table_info_t *tinfo;
+	int tinfo_arr_bytes, i, entries;
+
+	tinfo_arr_bytes = m_tbl_upd_msg_len - sizeof(proto_coord::header_t);
+	entries = tinfo_arr_bytes/sizeof(proto_coord::table_info_t);
+
+	assert( (tinfo_arr_bytes % sizeof(proto_coord::table_info_t) ) == 0);
+
+	tinfo = (proto_coord::table_info_t *) (m_tbl_upd_msg + sizeof(proto_coord::header_t) );
+
+	for(i = 0; i < entries; i++) {
+		//if(tinfo[i].dest == tinfo[i].link.id) printf("*");
+		printf("node %d --(%d)--> %d link\n", tinfo[i].dest, tinfo[i].link.cost, tinfo[i].link.id);
+	}	
 }
 
 void coord::listen_node(void *instance) {
@@ -111,18 +133,20 @@ void coord::on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin) {
 	type = proto_coord::msg_type(msg);
 	node_id = proto_coord::msg_node_id(msg);
 
-	NET04_LOG("received %d byte '%s' message from %s:%d (%d): ", msglen, proto_coord::type_to_str(type), inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), node_id);
+	NET04_LOG("received %d byte '%s' message from %s:%d (%d). ", msglen, proto_coord::type_to_str(type), inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), node_id);
 
 	switch(type) {
 		case proto_coord::TYPE_REQ_INIT :
 			on_req_init(node_id, sin);
 			break;
 		case proto_coord::TYPE_TBL_INFO :
-			on_tbl_info(node_id, hdr, msglen, msg, sin);
+			on_tbl_info(node_id, msg, msglen);
 			break;
 		default: 
 			printf("unknown message type %d\n", type);
 	}
+
+	fflush(stdout);
 	
 }
 
@@ -143,9 +167,24 @@ void coord::on_req_init(node_id_t node_id, const struct sockaddr_in *sin) {
 	}
 }
 
-void coord::on_tbl_info(node_id_t, proto_coord::header_t *hdr, int msglen, char *msg, const struct sockaddr_in *sin) {
+void coord::on_tbl_info(node_id_t, const char *buf, int buflen) {
+	int status;
 	
-
+	p_mutex_lock(&m_tbl_upd_mtx);
+	
+	if(m_tbl_upd != true) {
+		NET04_LOG("not waiting for table info data, ignoring...\n");
+		return;
+	}
+	
+	m_tbl_upd_msg_len = buflen;
+	m_tbl_upd_msg = new char[buflen];
+	
+	memcpy(m_tbl_upd_msg, buf, buflen);
+	
+	NET04_LOG("signal that table info data is ready\n");
+	p_cond_signal(&m_tbl_upd_cond);
+	p_mutex_unlock(&m_tbl_upd_mtx);
 }
 
 void coord::send_table(node_id_t node_id) const {

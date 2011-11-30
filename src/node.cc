@@ -182,7 +182,7 @@ void node::on_request_table() const {
 	send_coord_msg(buf, bufsize);
 	delete[] buf;
 
-	NET04_LOG("send %d byte table info data to coord\n", bufsize);
+	NET04_LOG("send %d = %d + %d*%d byte table info data to coord\n", bufsize, sizeof(proto_coord::header_t), entries, sizeof(proto_coord::table_info_t));
 }
 
 void node::listen_dv(void *instance) {
