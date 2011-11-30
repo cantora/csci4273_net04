@@ -21,6 +21,9 @@ namespace net04 {
 	void set_nonblocking(int fd);
 
 	void print_hex_bytes(const char *buf, int len);
+
+	int p_mutex_unlock(pthread_mutex_t *mutex);
+	int p_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex);
 }
 
 #endif /* NET04_COMMON_H */

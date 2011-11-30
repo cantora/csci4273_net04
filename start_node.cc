@@ -6,7 +6,7 @@
 using namespace net04;
 using namespace net01;
 
-void start_node(node::node_id_t node_id, struct sockaddr_in *coord_sin, struct sockaddr_in *dv_sin, struct sockaddr_in *coord_addr) {
+void start_node(node_id_t node_id, struct sockaddr_in *coord_sin, struct sockaddr_in *dv_sin, struct sockaddr_in *coord_addr) {
 	node n(node_id, coord_addr, coord_sin, dv_sin);
 
 	while(1) {

@@ -56,7 +56,17 @@ void command_usage() {
 	printf("\tp NODE\t\t\t\tprint forwarding table of NODE\n");
 	printf("\ta\t\t\t\tprint forwarding table of all nodes\n");
 	printf("\ts NODE1 NODE2 DATA\t\tsend DATA message from NODE1 to NODE2\n");
+	printf("\tr\t\t\t\treset nodes and exit\n");
 	printf("\th\t\t\t\tprint this message\n");
+}
+
+bool valid_node_id(int id) {
+
+	if(id < 0 || id > 255) {
+		return false;
+	}
+
+	return true;
 }
 
 void do_cost_change(coord *c, const char *str) {
@@ -67,8 +77,27 @@ void do_link_fail(coord *c, const char *str) {
 	printf("do_link_fail\n");
 }
 
-void do_print_table(coord *c, const char *str) {
-	printf("do_print_table\n");
+void do_print_table(coord *c, char *str) {
+	char *tok = strtok(str, " ");
+	int id;
+
+	tok = strtok(NULL, " ");
+	
+	if(tok == NULL || (tok[0] > 0x39) || (tok[0] < 0x30) ) {
+		printf("invalid node_id\n");
+		return;
+	}
+
+	id = strtol(tok, NULL, 10);
+
+	if(valid_node_id(id) == false) {
+		printf("invalid node_id %d\n", id);
+		return;
+	}
+
+	printf("node %d:\n", id);
+	c->print_table(id);	
+
 }
 
 void do_print_all_tables(coord *c, const char *str) {
@@ -79,8 +108,13 @@ void do_send_message(coord *c, const char *str) {
 	printf("do_send_message\n");
 }
 
-void do_cmd(coord *c, const char *str) {
-	const char *p = str;
+void do_net_reset(coord *c, const char *str) {
+	c->bcast_reset();
+	return;
+}
+
+void do_cmd(coord *c, char *str) {
+	char *p = str;
 	while(*p != 0x00 && *p == ' ') p++;
  
 	if(*p == 0x00 || *p == '\n') return;
@@ -100,6 +134,10 @@ void do_cmd(coord *c, const char *str) {
 			break;
 		case 's' : 
 			do_send_message(c, p);
+			break;
+		case 'r' :
+			do_net_reset(c, p);
+			exit(0);
 			break;
 		case 'h' : 
 			command_usage();

@@ -16,13 +16,16 @@ extern "C" {
 }
 
 #include "thread_pool.h"
+#include "net04_types.h"
+#include "proto_coord.h"
+#include "proto_base.h"
 
 namespace net04 {
 
 class node {
 	public:
-		typedef uint8_t node_id_t;
-		typedef uint8_t cost_t;
+		
+		static const cost_t INF_COST = 0x00;		
 		
 		node(node_id_t node_id, const struct sockaddr_in *coord_addr, 
 			struct sockaddr_in *coord_sin, struct sockaddr_in *dv_sin);
@@ -35,8 +38,11 @@ class node {
 
 		void send_coord_msg(const char *buf, int buflen) const;
 		void request_coord_init() const;
-		void on_coord_msg(int msglen, const char *msg);
+		void on_coord_msg(int msglen, char *msg);
+		void on_request_table() const;
 
+		void on_link_update(proto_coord::header_t *hdr, uint16_t msg_len, int buflen, const char *buf);
+		
 		const node_id_t m_node_id;
 
 		const struct sockaddr_in *const m_coord_addr;
@@ -47,7 +53,8 @@ class node {
 		int m_coord_socket;
 		struct sockaddr_in *const m_coord_sin;
 
-		std::map<node_id_t, cost_t> m_rtable;
+		std::map<node_id_t, fwd_entry_t > m_dv_table;
+		std::map<node_id_t, std::pair<struct sockaddr_in, cost_t> > m_links;
 
 		net02::thread_pool *const m_pool;
 

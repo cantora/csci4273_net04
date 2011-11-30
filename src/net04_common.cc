@@ -2,6 +2,7 @@
 
 extern "C" {
 #include <fcntl.h>
+#include <pthread.h>
 }
 
 void net04::set_nonblocking(int fd) {
@@ -26,4 +27,29 @@ void net04::print_hex_bytes(const char *buf, int len) {
 	for(i = 0; i < len; i++) {
 		printf("0x%02x ", buf[i]);
 	}
+}
+
+
+int net04::p_mutex_unlock(pthread_mutex_t *mutex) {
+	int status;
+
+	status = pthread_mutex_unlock(mutex);
+
+	if(status != 0) {
+		FATAL("unlock error");
+	}
+
+	return status;
+}
+
+int net04::p_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
+	int status;
+
+	status = pthread_cond_wait(cond, mutex);
+
+	if(status != 0) {
+		FATAL("cond_wait error");
+	}
+
+	return status;
 }
