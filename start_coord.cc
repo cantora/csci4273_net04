@@ -101,7 +101,7 @@ void do_print_table(coord *c, char *str) {
 }
 
 void do_print_all_tables(coord *c, const char *str) {
-	printf("do_print_all_tables\n");
+	c->print_all_tables();
 }
 
 void do_send_message(coord *c, const char *str) {

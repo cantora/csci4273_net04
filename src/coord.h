@@ -78,6 +78,7 @@ class coord {
 	
 		void bcast_reset();
 
+		void print_all_tables();
 		void print_table(node_id_t node_id);
 
 	private:
@@ -89,6 +90,7 @@ class coord {
 
 		void print_tbl_upd_msg() const;
 
+		void send_links();
 		void send_table(node_id_t node_id) const;
 		void send_cost_change(const edge *e, node_id_t node_id) const;
 
@@ -115,6 +117,8 @@ class coord {
 		char *m_tbl_upd_msg;
 		int m_tbl_upd_msg_len;
 
+		bool m_initialized_links;
+		time_t m_last_reg;
 
 }; /* coord */
 

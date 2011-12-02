@@ -55,15 +55,18 @@ void node::listen_coord(void *instance) {
 	char msgbuf[proto_coord::max_msg_len];
 	time_t last_reg, tmp;
 	double dif;
+	char prefix[32];
+	
+	sprintf(prefix, "node %d", n->m_node_id);
 
 	last_reg = 0;
  
-	NET04_LOG("listen_coord: start\n");
+	NET04_LOG("%s: listen_coord: start\n", prefix);
 	set_nonblocking(n->m_coord_socket);
 
 	while(1) {
 		if( (n->m_registered != true) && ( (time(NULL) - last_reg) > 8) ) {
-			NET04_LOG("register with coord...\n");
+			NET04_LOG("%s: register with coord...\n", prefix);
 			n->request_coord_init();
 			last_reg = time(NULL);
 		}
@@ -98,7 +101,7 @@ void node::on_coord_msg(int msglen, char *msg) {
 	type = proto_coord::msg_type(msg);
 	len = proto_coord::msg_len(msg);
 	
-	NET04_LOG("received %d byte '%s' (%d) message from coord\n", msglen, proto_coord::type_to_str(type), type); //print_hex_bytes(msg, msglen); printf("\n");
+	NET04_LOG("node %d: received %d byte '%s' (%d) message from coord\n", m_node_id, msglen, proto_coord::type_to_str(type), type); //print_hex_bytes(msg, msglen); printf("\n");
 
 	switch(type) {
 		case proto_coord::TYPE_REG_ACK : 
@@ -144,7 +147,7 @@ void node::on_link_update(proto_coord::header_t *hdr, uint16_t msg_len, int bufl
 	m_links[ld->id].first.sin_port = ld->port;
 	m_links[ld->id].first.sin_family = AF_INET;
 	
-	NET04_LOG("added link to node %d (%s:%d) with cost %d\n", ld->id, inet_ntoa(m_links[ld->id].first.sin_addr), ntohs(m_links[ld->id].first.sin_port), ld->cost);
+	NET04_LOG("node %d: added link to node %d (%s:%d) with cost %d\n", m_node_id, ld->id, inet_ntoa(m_links[ld->id].first.sin_addr), ntohs(m_links[ld->id].first.sin_port), ld->cost);
 }
 
 void node::on_request_table() const {	
@@ -171,18 +174,20 @@ void node::on_request_table() const {
 		tinfo->dest = (*link_it).first;
 		tinfo->link.id = (*link_it).first;
 		tinfo->link.cost = (*link_it).second.second;
+		tinfo++;
 	}
 
 	for(dv_it = m_dv_table.begin(); dv_it != m_dv_table.end(); dv_it++) {
 		tinfo->dest = (*dv_it).first;
 		tinfo->link.id = (*dv_it).second.id;
 		tinfo->link.cost = (*dv_it).second.cost;
+		tinfo++;
 	}
 
 	send_coord_msg(buf, bufsize);
 	delete[] buf;
 
-	NET04_LOG("send %d = %d + %d*%d byte table info data to coord\n", bufsize, sizeof(proto_coord::header_t), entries, sizeof(proto_coord::table_info_t));
+	NET04_LOG("node %d: send %d = %d + %d*%d byte table info data to coord\n", m_node_id, bufsize, sizeof(proto_coord::header_t), entries, sizeof(proto_coord::table_info_t));
 }
 
 void node::listen_dv(void *instance) {
