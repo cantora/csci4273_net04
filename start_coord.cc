@@ -2,7 +2,7 @@
 #include <cstring>
 
 #include <list>
-
+#include <memory>
 #include "coord.h"
 #include "sock.h"
 #include "net04_common.h"
@@ -14,7 +14,7 @@ void usage(int argc, char *argv[]) {
 	printf("usage: %s NODE1.NODE2.COST [NODE1.NODE2.COST, ...]\n", argv[0]);
 }
 
-int parse_edge(char *str, coord::edge &e) {
+int parse_edge(char *str, coord::edge &e, cost_t &cost) {
 	char *tok;
 	int stuff[3];
 	int i;
@@ -37,11 +37,11 @@ int parse_edge(char *str, coord::edge &e) {
 		tok = strtok(NULL, ".");
 	}	
 
-	e.n1 = stuff[0];
-	e.n2 = stuff[1];
-	e.cost = stuff[2];
+	e.first = stuff[0];
+	e.second = stuff[1];
+	cost = stuff[2];
 
-	if(e.n1 == e.n2) {
+	if(e.first == e.second) {
 		printf("link specifies the same node for each end\n");
 		return -1;
 	}
@@ -69,12 +69,70 @@ bool valid_node_id(int id) {
 	return true;
 }
 
-void do_cost_change(coord *c, const char *str) {
-	printf("do_cost_change\n");
+void cost_change(coord *c, node_id_t n1, node_id_t n2, cost_t cost) {
+	if(c->link_cost_change(n1, n2, cost) != 0) {
+		printf("no such link in network\n");
+	}
+	else {
+		printf("notified network of link change\n");
+	}
 }
 
-void do_link_fail(coord *c, const char *str) {
-	printf("do_link_fail\n");
+int parse_n_uint8s(char *str, uint8_t *arr, int n, char **end) {
+	char *tok = strtok(str, " ");
+	std::auto_ptr<int> p1(new int[n]);
+	int i;
+	
+	for(i = 0; i < n; i++) {
+		tok = strtok(NULL, " ");
+
+		if(tok == NULL || (tok[0] > 0x39) || (tok[0] < 0x30) ) {
+			printf("invalid argument: %s\n", tok);
+			return -1;
+		}
+
+		(&*p1)[i] = strtol(tok, NULL, 10);
+
+		if( ((&*p1)[i] < 0) || ((&*p1)[i] > 255) ) {
+			printf("invalid value: %d", (&*p1)[i]);
+			return -1;
+		}
+
+		arr[i] = (&*p1)[i];
+	}
+
+	if(end != NULL) {
+		*end = tok + strlen(tok) + 1;
+	}
+
+	return 0;
+}
+
+void do_cost_change(coord *c, char *str) {
+	uint8_t arr[3];
+	int status;
+
+	status = parse_n_uint8s(str, arr, 3, NULL);
+
+	if( (status != 0) || !valid_node_id(arr[0]) || !valid_node_id(arr[1]) || arr[2] == 0 ) {
+		printf("invalid arguments\n");
+	}
+
+	cost_change(c, arr[0], arr[1], arr[2]);
+}
+
+void do_link_fail(coord *c, char *str) {
+	uint8_t arr[2];
+	int status;
+
+	status = parse_n_uint8s(str, arr, 2, NULL);
+
+	if( (status != 0) || !valid_node_id(arr[0]) || !valid_node_id(arr[1]) ) {
+		printf("invalid arguments\n");
+		return;
+	}
+
+	cost_change(c, arr[0], arr[1], 0);
 }
 
 void do_print_table(coord *c, char *str) {
@@ -104,8 +162,30 @@ void do_print_all_tables(coord *c, const char *str) {
 	c->print_all_tables();
 }
 
-void do_send_message(coord *c, const char *str) {
-	printf("do_send_message\n");
+void do_send_message(coord *c, char *str) {
+	node_id_t arr[2];
+	int status;
+	char *tok, *end;
+
+	status = parse_n_uint8s(str, arr, 2, &end);
+
+	if( (status != 0) || !valid_node_id(arr[0]) || !valid_node_id(arr[1]) ) {
+		printf("invalid arguments\n");
+		return;
+	}
+
+		
+	printf("send message from node %d to node %d: %s\n", arr[0], arr[1], end);
+	
+	if(c->send(5, arr[0], arr[1], end, strlen(end)-1) != 0) { // -1 for the newline
+		if(errno == ETIMEDOUT) {
+			printf("error: response timeout\n");
+			return;
+		}
+		else {
+			FATAL("c->send");
+		}
+	}
 }
 
 void do_net_reset(coord *c, const char *str) {
@@ -152,7 +232,8 @@ void do_cmd(coord *c, char *str) {
 
 void start_coord(struct sockaddr_in *sin, int argc, char *argv[]) {
 	int i,len;
-	coord::edge e;
+	coord::edge e(1,2); // dummy values
+	cost_t cost;
 	coord c(sin);
 	char buf[512];
 	
@@ -161,14 +242,14 @@ void start_coord(struct sockaddr_in *sin, int argc, char *argv[]) {
 		strncpy(buf, argv[i], ((len > 512)? 512 : len) );
 		buf[len] = 0x00;
 
-		if(parse_edge(buf, e) != 0) {
+		if(parse_edge(buf, e, cost) != 0) {
 			printf("could not parse %s\n", argv[i]);
 			usage(argc, argv);
 			exit(1);
 		}
 		
-		printf("add edge: %d<-(%d)->%d\n", e.n1, e.cost, e.n2);
-		c.add_edge(e);
+		printf("add edge: %d<-(%d)->%d\n", e.first, cost, e.second);
+		c.add_edge(e, cost);
 	}
 	
 	printf("port: %d\n", c.port() );

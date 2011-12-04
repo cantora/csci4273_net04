@@ -4,17 +4,25 @@
 
 #include "net04_common.h"
 #include "sock.h"
+#include "proto_node.h"
+
 
 using namespace net04;
 using namespace net02;
 using namespace net01;
 using namespace std;
 
-coord::coord(struct sockaddr_in *sin) : m_sin(sin), m_pool(new thread_pool(2 + 8) ), m_tbl_upd(false), m_tbl_upd_msg(NULL), m_initialized_links(false), m_last_reg(time(NULL)) {
+coord::coord(struct sockaddr_in *sin) : m_sin(sin), m_pool(new thread_pool(2 + 8) ), m_tbl_upd(false), 
+		m_tbl_upd_msg(NULL), m_initialized_links(false), m_last_reg(time(NULL)), 
+		m_send_wait(false), m_send_inc(0) {
+
 	m_socket = sock::bound_udp_socket(m_sin);
 
 	pthread_mutex_init(&m_tbl_upd_mtx, NULL);
 	pthread_cond_init(&m_tbl_upd_cond, NULL);
+
+	pthread_mutex_init(&m_send_mtx, NULL);
+	pthread_cond_init(&m_send_cond, NULL);
 
 	while(m_pool->dispatch_thread(listen_node, this, NULL) != 0) {
 		usleep(1000);
@@ -28,7 +36,91 @@ coord::~coord() {
 	pthread_mutex_destroy(&m_tbl_upd_mtx);
 	pthread_cond_destroy(&m_tbl_upd_cond);
 	
+	pthread_mutex_destroy(&m_send_mtx);
+	pthread_cond_destroy(&m_send_cond);
+	
 	close(m_socket);	
+}
+
+int coord::send(int timeout, node_id_t src, node_id_t dest, const char *msg, int msglen) {
+	p_mutex_lock(&m_send_mtx);
+	
+	m_send_wait = true;
+
+	send_message(src, dest, msg, msglen);
+
+	/* wait to receive signal that we got a reply from node_id about its table */
+	if(p_cond_timedwait_usec(&m_send_cond, &m_send_mtx, 1000000*timeout) == ETIMEDOUT) { /* wait for timeout secs */
+		errno = ETIMEDOUT;
+		return -1;
+	}
+
+	//NETO4_LOG("received signal\n");
+	if(m_send_reply == NULL) {
+		FATAL("m_send_reply is NULL");
+	}
+	
+	print_fwd_reply_info();
+
+	m_send_wait = false;
+	delete[] m_send_reply;
+	m_send_reply = NULL;
+	m_send_inc++;
+
+	p_mutex_unlock(&m_send_mtx);
+}
+
+void coord::print_fwd_reply_info() const {
+	node_id_t id = proto_base::msg_node_id(m_send_reply);
+	uint16_t type = proto_base::msg_type(m_send_reply);
+
+	printf("reply from node %d: %s (%d)\n", id, proto_coord::type_to_str(type), type);	
+}
+
+void coord::send_message(node_id_t src, node_id_t dest, const char *msg, int msglen) const {
+	proto_base::header_t *hdr;
+	int msgsize;
+	char *buf;
+	char *n_offset;
+	proto_node::msg_header_t *mhdr;
+
+	msgsize = sizeof(proto_base::header_t) + sizeof(proto_node::msg_header_t) + msglen;
+	buf = new char[msgsize];
+	hdr = (proto_base::header_t *) buf;
+
+	proto_coord::send_msg(hdr, msglen);
+
+	n_offset = buf + sizeof(proto_base::header_t);
+	mhdr = (proto_node::msg_header_t *) n_offset;
+	mhdr->msg_id = m_send_inc;
+	mhdr->src = src;
+	mhdr->dest = dest;
+	memset(mhdr->route, 0, proto_node::max_route_size);
+
+	memcpy(n_offset + sizeof(proto_node::msg_header_t), msg, msglen);
+	
+	//print_hex_bytes(buf, msgsize); printf("\n");
+	send_msg_to_node(src, buf, msgsize );
+
+	delete[] buf;
+}
+
+int coord::link_cost_change(node_id_t n1, node_id_t n2, cost_t cost) {
+	edge e(n1, n2);
+	map<edge, cost_t>::iterator it;
+
+	it = m_edges.find(e);
+	
+	if(it == m_edges.end() ) {
+		return -1;
+	}
+
+	//(it)->cost = e.cost;
+	m_edges.erase(it);
+	m_edges[e] = cost;
+
+	send_cost_change(&e, cost, e.first);
+	send_cost_change(&e, cost, e.second);
 }
 
 void coord::print_all_tables() {
@@ -79,16 +171,16 @@ void coord::print_table(node_id_t node_id) {
 }
 
 void coord::print_tbl_upd_msg() const {
-	proto_coord::header_t *hdr;
+	proto_base::header_t *hdr;
 	proto_coord::table_info_t *tinfo;
 	int tinfo_arr_bytes, i, entries;
 
-	tinfo_arr_bytes = m_tbl_upd_msg_len - sizeof(proto_coord::header_t);
+	tinfo_arr_bytes = m_tbl_upd_msg_len - sizeof(proto_base::header_t);
 	entries = tinfo_arr_bytes/sizeof(proto_coord::table_info_t);
 
 	assert( (tinfo_arr_bytes % sizeof(proto_coord::table_info_t) ) == 0);
 
-	tinfo = (proto_coord::table_info_t *) (m_tbl_upd_msg + sizeof(proto_coord::header_t) );
+	tinfo = (proto_coord::table_info_t *) (m_tbl_upd_msg + sizeof(proto_base::header_t) );
 
 	printf("\t+-dest\t+link\t+cost\n");
 	printf("\t+---------------------\n");
@@ -150,15 +242,15 @@ void coord::listen_node(void *instance) {
 void coord::on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin) {
 	uint16_t type;
 	node_id_t node_id;
-	proto_coord::header_t *hdr = (proto_coord::header_t *) msg;	
+	proto_base::header_t *hdr = (proto_base::header_t *) msg;	
 	char dbg_msg[256];
 
 	assert(sin != NULL);
 
-	proto_coord::ntoh_hdr(hdr);
+	proto_base::ntoh_hdr(hdr);
 
-	type = proto_coord::msg_type(msg);
-	node_id = proto_coord::msg_node_id(msg);
+	type = proto_base::msg_type(msg);
+	node_id = proto_base::msg_node_id(msg);
 
 	sprintf(dbg_msg, "received %d byte '%s' message from %s:%d (%d). ", msglen, proto_coord::type_to_str(type), inet_ntoa(sin->sin_addr), ntohs(sin->sin_port), node_id);
 
@@ -169,6 +261,10 @@ void coord::on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin) {
 			break;
 		case proto_coord::TYPE_TBL_INFO :
 			on_tbl_info(node_id, msg, msglen);
+			break;
+		case proto_coord::TYPE_FWD_ERR :
+		case proto_coord::TYPE_FWD_ACK :
+			on_fwd_msg(type, node_id, msg, msglen);
 			break;
 		default: 
 			NET04_LOG(dbg_msg);
@@ -195,6 +291,27 @@ void coord::on_req_init(node_id_t node_id, const struct sockaddr_in *sin) {
 		//send_table(node_id);
 		m_last_reg = time(NULL);
 	}
+}
+
+void coord::on_fwd_msg(uint16_t type, node_id_t, char *buf, int buflen) {
+	int status;
+	uint32_t msg_id = proto_node::mhdr_msg_id(buf);
+	
+	p_mutex_lock(&m_send_mtx);
+	
+	if(m_send_wait != true || msg_id != m_send_inc) {
+		NET04_LOG("not waiting for fwd_msg data on message %d, ignoring...\n", msg_id);
+		return;
+	}
+	
+	m_send_reply_len = buflen;
+	m_send_reply = new char[buflen];
+	
+	memcpy(m_send_reply, buf, buflen);
+	
+	//NET04_LOG("signal that table info data is ready\n");
+	p_cond_signal(&m_send_cond);
+	p_mutex_unlock(&m_send_mtx);
 }
 
 void coord::on_tbl_info(node_id_t, const char *buf, int buflen) {
@@ -228,39 +345,39 @@ void coord::send_links() {
 }
 
 void coord::send_table(node_id_t node_id) const {
-	set<edge>::const_iterator it;
+	map<edge, cost_t>::const_iterator it;
 
 	for(it = m_edges.begin(); it != m_edges.end(); it++) {
-		if((*it).contains(node_id) ) {
-			send_cost_change(&(*it), node_id);
+		if((*it).first.contains(node_id) ) {
+			send_cost_change(&(*it).first, (*it).second, node_id);
 			usleep(1000);
 		}
 	}
 }
 
 void coord::request_table(node_id_t node_id) const {
-	char buf[sizeof(proto_coord::header_t)];
-	proto_coord::header_t *hdr = (proto_coord::header_t *) buf;
+	char buf[sizeof(proto_base::header_t)];
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
 	
 	proto_coord::request_table(hdr);
 		
 	send_msg_to_node(node_id, buf, sizeof(buf) );
 }
 
-void coord::send_cost_change(const edge *e, node_id_t node_id) const {
-	char buf[sizeof(proto_coord::header_t) + sizeof(proto_coord::link_desc_t)];
-	proto_coord::header_t *hdr = (proto_coord::header_t *) buf;
+void coord::send_cost_change(const edge *e, cost_t cost, node_id_t node_id) const {
+	char buf[sizeof(proto_base::header_t) + sizeof(proto_coord::link_desc_t)];
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
 	proto_coord::link_desc_t ld;
 	map<node_id_t, struct sockaddr_in>::const_iterator it;
 	const struct sockaddr_in *sin;
 	
-	NET04_LOG("send cost change to node %d: {:n1 => %d, :n2 => %d, :cost => %d}\n", node_id, e->n1, e->n2, e->cost);
+	NET04_LOG("send cost change to node %d: {:n1 => %d, :n2 => %d, :cost => %d}\n", node_id, e->first, e->second, cost);
 
-	if(e->n1 == node_id) {
-		ld.id = e->n2;
+	if(e->first == node_id) {
+		ld.id = e->second;
 	}
-	else if(e->n2 == node_id) {
-		ld.id = e->n1;
+	else if(e->second == node_id) {
+		ld.id = e->first;
 	}
 	else {
 		FATAL("edge doesnt contain node_id");
@@ -270,7 +387,7 @@ void coord::send_cost_change(const edge *e, node_id_t node_id) const {
 		FATAL("node_id is the same as ld.id");
 	}
 
-	ld.cost = e->cost;
+	ld.cost = cost;
 	
 	it = m_nodes.find(ld.id);
 
@@ -285,14 +402,14 @@ void coord::send_cost_change(const edge *e, node_id_t node_id) const {
 
 	proto_coord::link_update(hdr);
 	
-	*( (proto_coord::link_desc_t *)(buf + sizeof(proto_coord::header_t)) ) = (proto_coord::link_desc_t) ld;
+	*( (proto_coord::link_desc_t *)(buf + sizeof(proto_base::header_t)) ) = (proto_coord::link_desc_t) ld;
 	
 	send_msg_to_node(node_id, buf, sizeof(buf) );
 }
 
 void coord::bcast_reset() {
-	char buf[sizeof(proto_coord::header_t)];
-	proto_coord::header_t *hdr = (proto_coord::header_t *) buf;
+	char buf[sizeof(proto_base::header_t)];
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
 	
 	proto_coord::net_reset(hdr);
 		
@@ -304,11 +421,11 @@ void coord::bcast_reset() {
 
 void coord::bcast_msg(char *buf, int buflen) const {
 	map<node_id_t, struct sockaddr_in>::const_iterator it;
-	proto_coord::header_t *hdr = (proto_coord::header_t *) buf;
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
 	
-	assert(buflen >= sizeof(proto_coord::header_t) );
+	assert(buflen >= sizeof(proto_base::header_t) );
 	
-	proto_coord::hton_hdr(hdr);
+	proto_base::hton_hdr(hdr);
 	for(it = m_nodes.begin(); it != m_nodes.end(); it++) {
 		proto_base::send_udp_msg(m_socket, &(*it).second, buflen, buf);
 		usleep(10000);
@@ -316,20 +433,20 @@ void coord::bcast_msg(char *buf, int buflen) const {
 }
 
 void coord::reply_net_size(node_id_t node_id) const {
-	char buf[sizeof(proto_coord::header_t) + sizeof(proto_coord::net_size_t)];
-	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
+	char buf[sizeof(proto_base::header_t) + sizeof(proto_coord::net_size_t)];
+	proto_base::header_t *reply = (proto_base::header_t *) buf;
 	
 	proto_coord::reply_net_size(reply);
 	
 	assert(sizeof(proto_coord::net_size_t) == 1);
-	*(buf + sizeof(proto_coord::header_t) ) = (proto_coord::net_size_t) m_nodes.size();
+	*(buf + sizeof(proto_base::header_t) ) = (proto_coord::net_size_t) m_nodes.size();
 	
 	send_msg_to_node(node_id, buf, sizeof(buf) );
 }
 
 void coord::reply_err(node_id_t node_id, const struct sockaddr_in *sin) const {
-	char buf[sizeof(proto_coord::header_t)];
-	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
+	char buf[sizeof(proto_base::header_t)];
+	proto_base::header_t *reply = (proto_base::header_t *) buf;
 	
 	proto_coord::reply_err(reply);
 	
@@ -337,8 +454,8 @@ void coord::reply_err(node_id_t node_id, const struct sockaddr_in *sin) const {
 }
 
 void coord::reply_ok(node_id_t node_id) const {
-	char buf[sizeof(proto_coord::header_t)];
-	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
+	char buf[sizeof(proto_base::header_t)];
+	proto_base::header_t *reply = (proto_base::header_t *) buf;
 	
 	proto_coord::reply_ok(reply);
 	
@@ -346,8 +463,8 @@ void coord::reply_ok(node_id_t node_id) const {
 }
 
 void coord::reply_reg_ack(node_id_t node_id) const {
-	char buf[sizeof(proto_coord::header_t)];
-	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
+	char buf[sizeof(proto_base::header_t)];
+	proto_base::header_t *reply = (proto_base::header_t *) buf;
 	
 	proto_coord::reply_reg_ack(reply);
 	
@@ -370,45 +487,30 @@ void coord::send_msg_to_node(node_id_t node_id, char *buf, int buflen) const {
 }
 
 void coord::send_msg(char *buf, int buflen, const struct sockaddr_in *sin) const {
-	proto_coord::header_t *hdr = (proto_coord::header_t *) buf;
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
 	
-	assert(buflen >= sizeof(proto_coord::header_t) );
+	assert(buflen >= sizeof(proto_base::header_t) );
 	
-	proto_coord::hton_hdr(hdr);
+	proto_base::hton_hdr(hdr);
 	proto_base::send_udp_msg(m_socket, sin, buflen, buf);
 }
 
-int coord::add_edge(const edge &e) {
-	pair<set<edge>::iterator,bool> ret;
+bool coord::add_edge(const edge &e, cost_t cost) {
+	pair<map<edge, cost_t>::iterator,bool> ret;
 
-	ret = m_edges.insert(e);
+	ret = m_edges.insert(make_pair(e, cost) );
 
 	return ret.second;
 }
 
 bool coord::network_ready() const {
-	set<edge>::const_iterator it;
+	map<edge, cost_t>::const_iterator it;
 
 	for(it = m_edges.begin(); it != m_edges.end(); it++) {
-		if( (m_nodes.find(it->n1) == m_nodes.end() ) || (m_nodes.find(it->n2) == m_nodes.end() ) ) {
+		if( (m_nodes.find(it->first.first) == m_nodes.end() ) || (m_nodes.find(it->first.second) == m_nodes.end() ) ) {
 			return false;
 		}
 	}
 
 	return true;
 }
-
-/*int coord::add_edge(node_id_t n1, node_id_t n2) {
-	node_id_t nodes[2] = {n1, n2};
-	set<node_id_t> s(nodes, nodes+1);
-	set<node_id_t>::const_iterator it;
-
-	if(m_edges.find(s) == m_edges.end()) {
-		return -1;	
-	}
-	else {
-		m_edges.insert(s);
-		return 0;
-	}	
-}
-*/

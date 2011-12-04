@@ -36,13 +36,17 @@ class node {
 		
 	private:
 
+		void send_coord_fwd_ack(uint32_t msg_id, uint16_t type) const;
 		void send_coord_msg(const char *buf, int buflen) const;
 		void request_coord_init() const;
+
 		void on_coord_msg(int msglen, char *msg);
 		void on_request_table() const;
 
-		void on_link_update(proto_coord::header_t *hdr, uint16_t msg_len, int buflen, const char *buf);
-		
+		void on_link_update(proto_base::header_t *hdr, uint16_t msg_len, int buflen, const char *buf);
+		void on_send_message(char *msg, int msglen) const;
+		void on_message_receive(char *msg, int msglen) const;
+
 		const node_id_t m_node_id;
 
 		const struct sockaddr_in *const m_coord_addr;
@@ -54,7 +58,9 @@ class node {
 		struct sockaddr_in *const m_coord_sin;
 
 		std::map<node_id_t, fwd_entry_t > m_dv_table;
-		std::map<node_id_t, std::pair<struct sockaddr_in, cost_t> > m_links;
+	
+		typedef std::map<node_id_t, std::pair<struct sockaddr_in, cost_t> > link_map_t;
+		link_map_t m_links;
 
 		net02::thread_pool *const m_pool;
 

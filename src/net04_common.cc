@@ -3,6 +3,7 @@
 extern "C" {
 #include <fcntl.h>
 #include <pthread.h>
+#include <sys/time.h>
 }
 
 void net04::set_nonblocking(int fd) {
@@ -59,6 +60,37 @@ int net04::p_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
 	status = pthread_cond_wait(cond, mutex);
 
 	if(status != 0) {
+		FATAL("cond_wait error");
+	}
+
+	return status;
+}
+
+int net04::p_cond_timedwait_usec(pthread_cond_t *cond, pthread_mutex_t *mutex, int usec_timeout) {
+	int status;
+	struct timespec ts;
+	struct timeval tp;
+	int secs = usec_timeout/1000000;
+	int usecs = usec_timeout % 1000000;
+	int new_usecs;
+
+	if(gettimeofday(&tp, NULL) != 0) {
+		FATAL("gettimeofday");
+	}
+
+	ts.tv_sec  = tp.tv_sec;
+	ts.tv_nsec = 0;
+
+	if(usecs + tp.tv_usec >= 1000000) {
+		ts.tv_sec += 1;
+	}
+	
+	ts.tv_sec += secs;
+	ts.tv_nsec += ((usecs + tp.tv_usec) % 1000000) * 1000;
+	
+	status = pthread_cond_timedwait(cond, mutex, &ts);
+
+	if(status != 0 && status != ETIMEDOUT) {
 		FATAL("cond_wait error");
 	}
 

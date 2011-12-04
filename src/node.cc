@@ -2,6 +2,7 @@
 
 #include "net04_common.h"
 #include "sock.h"
+#include "proto_node.h"
 
 using namespace net04;
 using namespace net02;
@@ -32,17 +33,37 @@ node::~node() {
 	close(m_coord_socket);
 }
 
+void node::send_coord_fwd_ack(uint32_t msg_id, uint16_t type) const {
+	int size = sizeof(proto_base::header_t) + 4;
+	char buf[size];
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
+	
+	if( type != proto_coord::TYPE_FWD_ERR && type != proto_coord::TYPE_FWD_ACK) {
+		FATAL("invalid fwd ack type");
+	}
+
+	NET04_LOG("node %d: fwd ack %s for msg_id %d to coord\n", m_node_id, proto_coord::type_to_str(type), msg_id);
+
+	hdr->id = m_node_id;
+	hdr->type = type;
+	hdr->msg_len = 4;
+	
+	*( (uint32_t *) (buf + sizeof(proto_base::header_t) ) ) = msg_id;
+
+	send_coord_msg(buf, size);
+}
+
 void node::send_coord_msg(const char *buf, int buflen) const {
-	proto_coord::header_t *reply = (proto_coord::header_t *) buf;
+	proto_base::header_t *reply = (proto_base::header_t *) buf;
 
-	assert(buflen >= sizeof(proto_coord::header_t) );
+	assert(buflen >= sizeof(proto_base::header_t) );
 
-	proto_coord::hton_hdr(reply);
+	proto_base::hton_hdr(reply);
 	proto_base::send_udp_msg(m_coord_socket, m_coord_addr, buflen, buf);
 }
 
 void node::request_coord_init() const {
-	proto_coord::header_t hdr;
+	proto_base::header_t hdr;
 
 	proto_coord::request_coord_init(&hdr, m_node_id);
 
@@ -94,14 +115,14 @@ void node::listen_coord(void *instance) {
 
 void node::on_coord_msg(int msglen, char *msg) {
 	uint16_t type, len;
-	proto_coord::header_t *hdr = (proto_coord::header_t *) msg;	
+	proto_base::header_t *hdr = (proto_base::header_t *) msg;	
 
-	proto_coord::ntoh_hdr(hdr);
+	proto_base::ntoh_hdr(hdr);
 
-	type = proto_coord::msg_type(msg);
-	len = proto_coord::msg_len(msg);
+	type = proto_base::msg_type(msg);
+	len = proto_base::msg_len(msg);
 	
-	NET04_LOG("node %d: received %d byte '%s' (%d) message from coord\n", m_node_id, msglen, proto_coord::type_to_str(type), type); //print_hex_bytes(msg, msglen); printf("\n");
+	NET04_LOG("node %d: received %d byte '%s' (%d) message from coord\n", m_node_id, msglen, proto_coord::type_to_str(type), type); 
 
 	switch(type) {
 		case proto_coord::TYPE_REG_ACK : 
@@ -122,53 +143,112 @@ void node::on_coord_msg(int msglen, char *msg) {
 			on_request_table();			
 			break;
 
+		case proto_coord::TYPE_SND_MSG : 
+			on_send_message(msg, msglen);
+			break;
+
 		case proto_coord::TYPE_ERR : 
 			printf("received TYPE_ERR from coord.");
 			break;
 
 		default:
-			printf("unknown message type %d\n", type);
+			printf("unknown message type %d: ", type);
+			print_hex_bytes(msg, msglen); printf("\n");
 	}
 }
 
-void node::on_link_update(proto_coord::header_t *hdr, uint16_t msg_len, int buflen, const char *buf) {
+void node::on_send_message(char *msg, int msglen) const {
+	proto_base::header_t *hdr = (proto_base::header_t *) msg;
+	node_id_t src, dest;
+	
+	proto_node::ntoh_msg_hdr((proto_node::msg_header_t *) msg + sizeof(proto_base::header_t) + sizeof(proto_node::msg_header_t) );
+
+	src = proto_node::mhdr_src(msg);
+	if(src != m_node_id) {
+		FATAL("invalid source\n");
+	}
+
+	dest = proto_node::mhdr_dest(msg);
+	if(dest == m_node_id) {
+		on_message_receive(msg, msglen);
+		send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ACK);
+		return;
+	}
+
+	hdr->id = m_node_id;
+	hdr->type = proto_node::TYPE_SND_MSG;
+	
+	proto_node::mhdr_zero_route_list(msg);
+	proto_node::mhdr_add_to_route_list(msg, m_node_id);
+
+	send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ERR);	
+}
+
+void node::on_message_receive(char *msg, int msglen) const {
+	node_id_t id = proto_node::mhdr_src(msg);
+	uint32_t msg_id = proto_node::mhdr_msg_id(msg);
+
+	printf("node %d: received message %d from node %d: ", m_node_id, msg_id, id);
+	proto_node::print_msg(msg, msglen);
+	printf("\n");
+}
+
+void node::on_link_update(proto_base::header_t *hdr, uint16_t msg_len, int buflen, const char *buf) {
 	proto_coord::link_desc_t *ld;
-	//map<node_id_t, struct sockaddr_in>::
+	link_map_t::iterator it;
+	bool deleted = false;
 
 	if(msg_len != sizeof(proto_coord::link_desc_t) ) {
 		FATAL("unexpected size of link update message");
 	}
 
-	ld = (proto_coord::link_desc_t *) (buf + sizeof(proto_coord::header_t));
+	ld = (proto_coord::link_desc_t *) (buf + sizeof(proto_base::header_t));
 
-	m_links[ld->id].second = ld->cost;
-	memset(&m_links[ld->id].first, 0, sizeof(struct sockaddr_in) );
-	m_links[ld->id].first.sin_addr.s_addr = ld->s_addr;
-	m_links[ld->id].first.sin_port = ld->port;
-	m_links[ld->id].first.sin_family = AF_INET;
-	
-	NET04_LOG("node %d: added link to node %d (%s:%d) with cost %d\n", m_node_id, ld->id, inet_ntoa(m_links[ld->id].first.sin_addr), ntohs(m_links[ld->id].first.sin_port), ld->cost);
+	if(ld->cost == 0) {
+		if( (it = m_links.find(ld->id) ) != m_links.end() ) {
+			m_links.erase(it);
+			deleted = true;
+		}
+		else {
+			NET04_LOG("attempt to delete link to %d which does not exist\n", ld->id);
+			return;
+		}
+	}
+	else {
+		m_links[ld->id].second = ld->cost;
+		memset(&m_links[ld->id].first, 0, sizeof(struct sockaddr_in) );
+		m_links[ld->id].first.sin_addr.s_addr = ld->s_addr;
+		m_links[ld->id].first.sin_port = ld->port;
+		m_links[ld->id].first.sin_family = AF_INET;
+	}
+
+	NET04_LOG("node %d: %s link to node %d", m_node_id, (deleted? "removed" : "added"), ld->id);
+	if(!deleted) {
+		NET04_LOG(" (%s:%d) with cost %d", inet_ntoa(m_links[ld->id].first.sin_addr), ntohs(m_links[ld->id].first.sin_port), ld->cost);
+	}
+	NET04_LOG("\n");
+
 }
 
 void node::on_request_table() const {	
 	char *buf;
-	proto_coord::header_t *hdr;
+	proto_base::header_t *hdr;
 	map<node_id_t, std::pair<struct sockaddr_in, cost_t> >::const_iterator link_it;
 	map<node_id_t, fwd_entry_t >::const_iterator dv_it;
 	proto_coord::table_info_t *tinfo;
 	int entries = m_links.size() + m_dv_table.size();
-	int bufsize = sizeof(proto_coord::header_t) + entries*sizeof(proto_coord::table_info_t);
+	int bufsize = sizeof(proto_base::header_t) + entries*sizeof(proto_coord::table_info_t);
 	
 	if(entries < 1) {
 		return;
 	}
 
 	buf = new char[bufsize];
-	hdr = (proto_coord::header_t *) buf;
+	hdr = (proto_base::header_t *) buf;
 
 	proto_coord::table_info(hdr, m_node_id, entries);
 	
-	tinfo = (proto_coord::table_info_t *) (buf + sizeof(proto_coord::header_t) );
+	tinfo = (proto_coord::table_info_t *) (buf + sizeof(proto_base::header_t) );
 
 	for(link_it = m_links.begin(); link_it != m_links.end(); link_it++) {
 		tinfo->dest = (*link_it).first;
@@ -187,7 +267,7 @@ void node::on_request_table() const {
 	send_coord_msg(buf, bufsize);
 	delete[] buf;
 
-	NET04_LOG("node %d: send %d = %d + %d*%d byte table info data to coord\n", m_node_id, bufsize, sizeof(proto_coord::header_t), entries, sizeof(proto_coord::table_info_t));
+	NET04_LOG("node %d: send %d = %d + %d*%d byte table info data to coord\n", m_node_id, bufsize, sizeof(proto_base::header_t), entries, sizeof(proto_coord::table_info_t));
 }
 
 void node::listen_dv(void *instance) {

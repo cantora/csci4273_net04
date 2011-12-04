@@ -1,0 +1,44 @@
+
+		class edge {
+			public:
+			node_id_t n1;
+			node_id_t n2;
+			cost_t cost;
+
+			/*void serialize(char *buf) {
+				assert(sizeof(node_id_t) == 1);
+				assert(sizeof(cost_t) == 1);
+
+				*(buf) = n1;
+				*(buf + 1) = n2;
+				*(buf + 2) = cost;
+			}*/
+			
+			bool contains(node_id_t id) const {
+				return ( (n1 == id) || (n2 == id) );
+			}
+
+			static bool compare(const edge &e1, const edge &e2) {
+				return (e1.n1 == e2.n1 && e1.n2 == e2.n2) || (e1.n2 == e2.n1 && e1.n1 == e2.n2);
+			}
+
+			friend bool operator== (const edge &e1, const edge &e2) {
+				//printf("compare %d<->%d to %d<->%d\n", e1.n1, e1.n2, e2.n1, e2.n2);
+				return compare(e1, e2);
+			}
+
+			friend bool operator!= (const edge &e1, const edge &e2) {return !(e1 == e2); }
+			friend bool operator< (const edge &e1, const edge &e2) { 
+				printf("compare %d<->%d to %d<->%d: ", e1.n1, e1.n2, e2.n1, e2.n2);
+				if(e1 == e2) {
+					printf("equal\n");
+					return false;
+				}
+				else {	
+					bool ret = (e1.n1 < e2.n1) || ( (e1.n1 == e2.n1) && (e1.n2 < e2.n2) );
+					printf(ret? "less\n" : "greater\n");
+					return ret;
+				}
+			}
+
+		};

@@ -4,7 +4,7 @@
 #include <cerrno>
 #include <string>
 #include <map>
-
+#include <cstdio>
 #include <set>
 
 extern "C" {
@@ -20,40 +20,13 @@ extern "C" {
 #include "thread_pool.h"
 #include "proto_coord.h"
 #include "proto_base.h"
-
+#include "uo_pair.h"
 
 namespace net04 {
 
 class coord {
 	public:
-
-		class edge {
-			public:
-			node_id_t n1;
-			node_id_t n2;
-			cost_t cost;
-
-			/*void serialize(char *buf) {
-				assert(sizeof(node_id_t) == 1);
-				assert(sizeof(cost_t) == 1);
-
-				*(buf) = n1;
-				*(buf + 1) = n2;
-				*(buf + 2) = cost;
-			}*/
-			
-			bool contains(node_id_t id) const {
-				return ( (n1 == id) || (n2 == id) );
-			}
-
-			friend bool operator== (const edge &e1, const edge &e2) {
-				return (e1.n1 == e2.n1 && e1.n2 == e2.n2) || (e1.n2 == e2.n1 && e1.n1 == e2.n2);
-			}
-
-			friend bool operator!= (const edge &e1, const edge &e2) {return !(e1 == e2); }
-			friend bool operator< (const edge &e1, const edge &e2) { return &e1 < &e2; }
-
-		};
+		typedef uo_pair<node_id_t> edge;
 
 		coord(struct sockaddr_in *sin);
 		~coord();
@@ -72,11 +45,14 @@ class coord {
 			return m_edges.size();
 		}
 
-		int add_edge(const edge &e);
+		bool add_edge(const edge &e, cost_t cost);
 		
 		bool network_ready() const;
 	
 		void bcast_reset();
+
+		int send(int timeout, node_id_t src, node_id_t dest, const char *msg, int msglen);
+		int link_cost_change(node_id_t n1, node_id_t n2, cost_t cost);
 
 		void print_all_tables();
 		void print_table(node_id_t node_id);
@@ -87,12 +63,15 @@ class coord {
 		
 		void on_req_init(node_id_t node_id, const struct sockaddr_in *sin);
 		void on_tbl_info(node_id_t, const char *buf, int buflen);
+		void on_fwd_msg(uint16_t type, node_id_t, char *buf, int buflen);
 
 		void print_tbl_upd_msg() const;
+		void print_fwd_reply_info() const;
 
 		void send_links();
 		void send_table(node_id_t node_id) const;
-		void send_cost_change(const edge *e, node_id_t node_id) const;
+		void send_cost_change(const edge *e, cost_t cost, node_id_t node_id) const;
+		void send_message(node_id_t src, node_id_t dest, const char *msg, int msglen) const;
 
 		void request_table(node_id_t node_id) const;
 		void reply_net_size(node_id_t node_id) const;
@@ -109,13 +88,25 @@ class coord {
 		net02::thread_pool *const m_pool;
 
 		std::map<node_id_t, struct sockaddr_in> m_nodes;
-		std::set<edge> m_edges;
+
+		//typedef std::set<edge, bool(*)(const edge &, const edge &)> edge_set_t;
+
+		//std::set<edge> m_edges;
+		std::map<edge, cost_t> m_edges;
 
 		pthread_mutex_t m_tbl_upd_mtx;
 		pthread_cond_t m_tbl_upd_cond;
 		bool m_tbl_upd;
 		char *m_tbl_upd_msg;
 		int m_tbl_upd_msg_len;
+
+		pthread_mutex_t m_send_mtx;
+		pthread_cond_t m_send_cond;
+		bool m_send_wait;
+		uint32_t m_send_inc;
+		char *m_send_reply;
+		int m_send_reply_len;
+		
 
 		bool m_initialized_links;
 		time_t m_last_reg;

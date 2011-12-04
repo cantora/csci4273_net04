@@ -25,6 +25,7 @@ namespace net04 {
 	int p_mutex_lock(pthread_mutex_t *mutex);
 	int p_mutex_unlock(pthread_mutex_t *mutex);
 	int p_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex);
+	int p_cond_timedwait_usec(pthread_cond_t *cond, pthread_mutex_t *mutex, int usec_timeout);
 	int p_cond_signal(pthread_cond_t *cond);
 
 }
