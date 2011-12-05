@@ -17,7 +17,7 @@ using namespace proto_base;
 
 void proto_coord::request_coord_init(header_t *hdr, node_id_t id) {
 	hdr->type = TYPE_REQ_INIT;
-	hdr->msg_len = 0;
+	hdr->msg_len = sizeof(link_desc_t);
 	hdr->id = id;
 }
 

@@ -21,11 +21,11 @@ namespace proto_node {
 	};
 
 	const char *type_to_str(uint16_t type);
-	void print_msg(const char *buf, int buflen);
+	void print_msg(const char *buf);
 
-	uint32_t mhdr_msg_id(char *buf);
-	node_id_t mhdr_src(char *buf);
-	node_id_t mhdr_dest(char *buf);
+	uint32_t mhdr_msg_id(const char *buf);
+	node_id_t mhdr_src(const char *buf);
+	node_id_t mhdr_dest(const char *buf);
 	int mhdr_add_to_route_list(char *buf, node_id_t node_id);
 	void mhdr_zero_route_list(char *buf);
 	

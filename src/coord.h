@@ -61,7 +61,7 @@ class coord {
 
 		void on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin);
 		
-		void on_req_init(node_id_t node_id, const struct sockaddr_in *sin);
+		void on_req_init(node_id_t node_id, const char *msg, const struct sockaddr_in *sin);
 		void on_tbl_info(node_id_t, const char *buf, int buflen);
 		void on_fwd_msg(uint16_t type, node_id_t, char *buf, int buflen);
 
@@ -87,7 +87,13 @@ class coord {
 
 		net02::thread_pool *const m_pool;
 
-		std::map<node_id_t, struct sockaddr_in> m_nodes;
+		struct node_addr_t {
+			struct sockaddr_in coord_sin;
+			struct sockaddr_in dv_sin;
+		};
+
+		typedef std::map<node_id_t, node_addr_t> node_map_t;
+		node_map_t m_nodes;
 
 		//typedef std::set<edge, bool(*)(const edge &, const edge &)> edge_set_t;
 

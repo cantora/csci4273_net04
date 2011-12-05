@@ -54,20 +54,31 @@ void node::send_coord_fwd_ack(uint32_t msg_id, uint16_t type) const {
 }
 
 void node::send_coord_msg(const char *buf, int buflen) const {
-	proto_base::header_t *reply = (proto_base::header_t *) buf;
+	send_msg(m_coord_socket, m_coord_addr, buf, buflen);
+}
+
+void node::send_msg(int socket, const struct sockaddr_in *sin, const char *buf, int buflen) const {
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
 
 	assert(buflen >= sizeof(proto_base::header_t) );
 
-	proto_base::hton_hdr(reply);
-	proto_base::send_udp_msg(m_coord_socket, m_coord_addr, buflen, buf);
+	proto_base::hton_hdr(hdr);
+	proto_base::send_udp_msg(socket, sin, buflen, buf);
 }
 
 void node::request_coord_init() const {
-	proto_base::header_t hdr;
+	int size = sizeof(proto_base::header_t) + sizeof(proto_coord::link_desc_t);
+	char buf[size];
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
+	proto_coord::link_desc_t *ld = (proto_coord::link_desc_t *) (buf + sizeof(proto_base::header_t) );
 
-	proto_coord::request_coord_init(&hdr, m_node_id);
+	proto_coord::request_coord_init(hdr, m_node_id);
+	ld->s_addr = m_dv_sin->sin_addr.s_addr;
+	ld->port = m_dv_sin->sin_port;
+	ld->id = m_node_id;
+	ld->cost = 0;
 
-	send_coord_msg((char *)&hdr, sizeof(hdr));
+	send_coord_msg(buf, size);
 }
 
 void node::listen_coord(void *instance) {
@@ -159,20 +170,13 @@ void node::on_coord_msg(int msglen, char *msg) {
 
 void node::on_send_message(char *msg, int msglen) const {
 	proto_base::header_t *hdr = (proto_base::header_t *) msg;
-	node_id_t src, dest;
+	node_id_t src;
 	
-	proto_node::ntoh_msg_hdr((proto_node::msg_header_t *) msg + sizeof(proto_base::header_t) + sizeof(proto_node::msg_header_t) );
+	proto_node::ntoh_msg_hdr((proto_node::msg_header_t *) msg + sizeof(proto_base::header_t) );
 
 	src = proto_node::mhdr_src(msg);
 	if(src != m_node_id) {
 		FATAL("invalid source\n");
-	}
-
-	dest = proto_node::mhdr_dest(msg);
-	if(dest == m_node_id) {
-		on_message_receive(msg, msglen);
-		send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ACK);
-		return;
 	}
 
 	hdr->id = m_node_id;
@@ -181,15 +185,73 @@ void node::on_send_message(char *msg, int msglen) const {
 	proto_node::mhdr_zero_route_list(msg);
 	proto_node::mhdr_add_to_route_list(msg, m_node_id);
 
-	send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ERR);	
+	forward(msg, msglen);
 }
 
-void node::on_message_receive(char *msg, int msglen) const {
+void node::forward(const char *msg, int msglen) const {
+	node_id_t dest, nh;
+
+	dest = proto_node::mhdr_dest(msg);	
+	//src = proto_node::mhdr_src(msg);
+	if(dest == m_node_id) {
+		on_message_receive(msg, msglen);
+		send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ACK);
+		return;
+	}
+
+	nh = next_hop(dest);
+
+	if(nh == 0) {
+		NET04_LOG("node %d: could not find route to node %d\n", m_node_id, dest);
+		send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ERR);
+		return;
+	}
+
+	proto_node::hton_msg_hdr((proto_node::msg_header_t *) msg + sizeof(proto_base::header_t) );
+	
+	NET04_LOG("node %d: forward message %d to node %d for delivery to %d\n", m_node_id, proto_node::mhdr_msg_id(msg), nh, dest);
+
+	send_link_msg(nh, msg, msglen);
+}
+
+node_id_t node::next_hop(node_id_t dest) const {
+	map<node_id_t, fwd_entry_t>::const_iterator dv_it;
+	link_map_t::const_iterator link_it;
+
+	link_it = m_links.find(dest);
+	
+	if(link_it != m_links.end() ) {
+		return link_it->first;
+	}
+
+	dv_it = m_dv_table.find(dest);
+
+	if(dv_it == m_dv_table.end() ) {
+		return 0;
+	}
+
+	return dv_it->second.id;
+}
+
+void node::send_link_msg(node_id_t link, const char *buf, int buflen) const {
+	link_map_t::const_iterator it;
+
+	it = m_links.find(link);
+
+	if(it == m_links.end() ) {
+		FATAL("link does not exist");
+	}
+	
+	send_msg(m_dv_socket, &it->second.first, buf, buflen);
+}
+
+void node::on_message_receive(const char *msg, int msglen) const {
 	node_id_t id = proto_node::mhdr_src(msg);
 	uint32_t msg_id = proto_node::mhdr_msg_id(msg);
+	//uint16_t len = proto_base::msg_len(msg); //((proto_base::header_t *) msg)->msg_len;
 
 	printf("node %d: received message %d from node %d: ", m_node_id, msg_id, id);
-	proto_node::print_msg(msg, msglen);
+	proto_node::print_msg(msg);
 	printf("\n");
 }
 

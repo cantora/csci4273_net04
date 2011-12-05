@@ -6,8 +6,8 @@
 
 using namespace net04;
 
-void proto_node::print_msg(const char *buf, int buflen) {
-	uint16_t msglen = proto_base::msg_len(buf);
+void proto_node::print_msg(const char *buf) {
+	uint16_t msglen = proto_base::msg_len(buf) - sizeof(msg_header_t);
 	const char *msg = buf + sizeof(proto_base::header_t) + sizeof(msg_header_t);
 	//msg_header_t *mhdr = (msg_header_t *) (buf + sizeof(proto_base::header_t) );
 	int i;
@@ -17,19 +17,19 @@ void proto_node::print_msg(const char *buf, int buflen) {
 	}
 }
 
-uint32_t proto_node::mhdr_msg_id(char *buf) {
+uint32_t proto_node::mhdr_msg_id(const char *buf) {
 	msg_header_t *mhdr = (msg_header_t *) (buf + sizeof(proto_base::header_t) );
 
 	return mhdr->msg_id;
 }
 
-node_id_t proto_node::mhdr_src(char *buf) {
+node_id_t proto_node::mhdr_src(const char *buf) {
 	msg_header_t *mhdr = (msg_header_t *) (buf + sizeof(proto_base::header_t) );
 
 	return mhdr->src;
 }
 
-node_id_t proto_node::mhdr_dest(char *buf) {
+node_id_t proto_node::mhdr_dest(const char *buf) {
 	msg_header_t *mhdr = (msg_header_t *) (buf + sizeof(proto_base::header_t) );
 
 	return mhdr->dest;

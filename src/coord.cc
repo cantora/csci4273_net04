@@ -124,7 +124,7 @@ int coord::link_cost_change(node_id_t n1, node_id_t n2, cost_t cost) {
 }
 
 void coord::print_all_tables() {
-	map<node_id_t, struct sockaddr_in>::const_iterator it;
+	node_map_t::const_iterator it;
 	
 	for(it = m_nodes.begin(); it != m_nodes.end(); it++) {
 		printf("node %d:\n", (*it).first);
@@ -257,7 +257,7 @@ void coord::on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin) {
 	switch(type) {
 		case proto_coord::TYPE_REQ_INIT :
 			NET04_LOG(dbg_msg);
-			on_req_init(node_id, sin);
+			on_req_init(node_id, msg, sin);
 			break;
 		case proto_coord::TYPE_TBL_INFO :
 			on_tbl_info(node_id, msg, msglen);
@@ -275,7 +275,8 @@ void coord::on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin) {
 	
 }
 
-void coord::on_req_init(node_id_t node_id, const struct sockaddr_in *sin) {
+void coord::on_req_init(node_id_t node_id, const char *msg, const struct sockaddr_in *sin) {
+	proto_coord::link_desc_t *ld;
 
 	if(m_nodes.count(node_id) > 0) {
 		NET04_LOG("%d already registered, reply with error.\n", node_id);
@@ -284,7 +285,19 @@ void coord::on_req_init(node_id_t node_id, const struct sockaddr_in *sin) {
 		return;
 	}
 	else {
-		m_nodes[node_id] = *sin;
+		ld = (proto_coord::link_desc_t *) (msg + sizeof(proto_base::header_t) );
+		memset(&m_nodes[node_id].coord_sin, 0, sizeof(struct sockaddr_in));
+		memset(&m_nodes[node_id].dv_sin, 0, sizeof(struct sockaddr_in));
+
+		m_nodes[node_id].coord_sin = *sin;
+		
+		m_nodes[node_id].dv_sin.sin_addr.s_addr = ld->s_addr;
+		m_nodes[node_id].dv_sin.sin_port = ld->port;
+		m_nodes[node_id].dv_sin.sin_family = AF_INET;
+	
+		if(ld->id != node_id) {
+			FATAL("got contradictory registration info");
+		}
 
 		NET04_LOG("reply reg_ack (network size: %d)\n", m_nodes.size());
 		reply_reg_ack(node_id);
@@ -335,7 +348,7 @@ void coord::on_tbl_info(node_id_t, const char *buf, int buflen) {
 }
 
 void coord::send_links() {
-	map<node_id_t, struct sockaddr_in>::const_iterator it;
+	node_map_t::const_iterator it;
 	
 	for(it = m_nodes.begin(); it != m_nodes.end(); it++) {
 		send_table((*it).first);
@@ -368,7 +381,7 @@ void coord::send_cost_change(const edge *e, cost_t cost, node_id_t node_id) cons
 	char buf[sizeof(proto_base::header_t) + sizeof(proto_coord::link_desc_t)];
 	proto_base::header_t *hdr = (proto_base::header_t *) buf;
 	proto_coord::link_desc_t ld;
-	map<node_id_t, struct sockaddr_in>::const_iterator it;
+	node_map_t::const_iterator it;
 	const struct sockaddr_in *sin;
 	
 	NET04_LOG("send cost change to node %d: {:n1 => %d, :n2 => %d, :cost => %d}\n", node_id, e->first, e->second, cost);
@@ -395,7 +408,7 @@ void coord::send_cost_change(const edge *e, cost_t cost, node_id_t node_id) cons
 		FATAL("could not find node_id");
 	}
 
-	sin = &(*it).second;
+	sin = &(*it).second.dv_sin;
 	/* sockaddr_in already in network byte order */
 	ld.s_addr = sin->sin_addr.s_addr; 
 	ld.port = sin->sin_port;
@@ -420,14 +433,14 @@ void coord::bcast_reset() {
 }
 
 void coord::bcast_msg(char *buf, int buflen) const {
-	map<node_id_t, struct sockaddr_in>::const_iterator it;
+	node_map_t::const_iterator it;
 	proto_base::header_t *hdr = (proto_base::header_t *) buf;
 	
 	assert(buflen >= sizeof(proto_base::header_t) );
 	
 	proto_base::hton_hdr(hdr);
 	for(it = m_nodes.begin(); it != m_nodes.end(); it++) {
-		proto_base::send_udp_msg(m_socket, &(*it).second, buflen, buf);
+		proto_base::send_udp_msg(m_socket, &(*it).second.coord_sin, buflen, buf);
 		usleep(10000);
 	}
 }
@@ -473,7 +486,7 @@ void coord::reply_reg_ack(node_id_t node_id) const {
 
 void coord::send_msg_to_node(node_id_t node_id, char *buf, int buflen) const {
 	const struct sockaddr_in *sin;
-	map<node_id_t, struct sockaddr_in>::const_iterator it;
+	node_map_t::const_iterator it;
 
 	it = m_nodes.find(node_id);
 	
@@ -481,7 +494,7 @@ void coord::send_msg_to_node(node_id_t node_id, char *buf, int buflen) const {
 		FATAL("could not find node");
 	}
 
-	sin = &(*it).second;
+	sin = &(*it).second.coord_sin;
 
 	send_msg(buf, buflen, sin);
 }

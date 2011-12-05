@@ -35,9 +35,14 @@ class node {
 		static void listen_dv(void *instance);
 		
 	private:
+		void forward(const char *msg, int msglen) const;
 
+		node_id_t next_hop(node_id_t dest) const;
+		
+		void send_link_msg(node_id_t link, const char *buf, int buflen) const;
 		void send_coord_fwd_ack(uint32_t msg_id, uint16_t type) const;
 		void send_coord_msg(const char *buf, int buflen) const;
+		void send_msg(int socket, const struct sockaddr_in *sin, const char *buf, int buflen) const;
 		void request_coord_init() const;
 
 		void on_coord_msg(int msglen, char *msg);
@@ -45,7 +50,7 @@ class node {
 
 		void on_link_update(proto_base::header_t *hdr, uint16_t msg_len, int buflen, const char *buf);
 		void on_send_message(char *msg, int msglen) const;
-		void on_message_receive(char *msg, int msglen) const;
+		void on_message_receive(const char *msg, int msglen) const;
 
 		const node_id_t m_node_id;
 
