@@ -73,10 +73,12 @@ void node::request_coord_init() const {
 	proto_coord::link_desc_t *ld = (proto_coord::link_desc_t *) (buf + sizeof(proto_base::header_t) );
 
 	proto_coord::request_coord_init(hdr, m_node_id);
-	ld->s_addr = m_dv_sin->sin_addr.s_addr;
+	ld->s_addr = 0; /* coord should use the ip from request */ //m_dv_sin->sin_addr.s_addr;
 	ld->port = m_dv_sin->sin_port;
 	ld->id = m_node_id;
 	ld->cost = 0;
+
+	//NET04_LOG("reg addr %s:%d\n", inet_ntoa(m_dv_sin->sin_addr), ntohs(m_dv_sin->sin_port));
 
 	send_coord_msg(buf, size);
 }
@@ -169,7 +171,6 @@ void node::on_coord_msg(int msglen, char *msg) {
 }
 
 void node::on_send_message(char *msg, int msglen) const {
-	proto_base::header_t *hdr = (proto_base::header_t *) msg;
 	node_id_t src;
 	
 	proto_node::ntoh_msg_hdr((proto_node::msg_header_t *) msg + sizeof(proto_base::header_t) );
@@ -179,16 +180,13 @@ void node::on_send_message(char *msg, int msglen) const {
 		FATAL("invalid source\n");
 	}
 
-	hdr->id = m_node_id;
-	hdr->type = proto_node::TYPE_SND_MSG;
-	
 	proto_node::mhdr_zero_route_list(msg);
-	proto_node::mhdr_add_to_route_list(msg, m_node_id);
-
+	
 	forward(msg, msglen);
 }
 
-void node::forward(const char *msg, int msglen) const {
+void node::forward(char *msg, int msglen) const {
+	proto_base::header_t *hdr = (proto_base::header_t *) msg;
 	node_id_t dest, nh;
 
 	dest = proto_node::mhdr_dest(msg);	
@@ -198,6 +196,11 @@ void node::forward(const char *msg, int msglen) const {
 		send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ACK);
 		return;
 	}
+
+	hdr->id = m_node_id;
+	hdr->type = proto_node::TYPE_FWD_MSG;
+	
+	proto_node::mhdr_add_to_route_list(msg, m_node_id);
 
 	nh = next_hop(dest);
 
@@ -334,9 +337,174 @@ void node::on_request_table() const {
 
 void node::listen_dv(void *instance) {
 	node *n = (node *) instance;
+	int msglen;
+	char msgbuf[proto_node::max_msg_len];
+	time_t last_route_bcast, tmp;
+	char prefix[32];
+	struct sockaddr_in sin;
+	socklen_t sinlen = sizeof(struct sockaddr_in);
 
-	NET04_LOG("listen_dv: start\n");
+	sprintf(prefix, "node %d DV", n->m_node_id);
+ 
+	NET04_LOG("%s: listen_node: start\n", prefix);
+	set_nonblocking(n->m_dv_socket);
+
+	last_route_bcast = 0;
+
+	while(1) {
+		if(n->m_links.size() > 0) {
+			if(last_route_bcast == 0) last_route_bcast = time(NULL);
+
+			if(time(NULL) - last_route_bcast > 5) {
+				NET04_LOG("%s: broadcast routes to neighbors...\n", prefix);
+				n->route_bcast();
+				last_route_bcast = time(NULL);
+			}
+		}
+	
+		msglen = recvfrom(n->m_dv_socket, msgbuf, sizeof(msgbuf), 0, (sockaddr *) &sin, &sinlen);
+		if( msglen < 0) {
+			if(errno == EAGAIN) {
+				usleep(100000);
+				continue;	
+			}
+
+			FATAL(NULL);
+		}
+		else if(msglen == 0) {
+			FATAL("socket was closed");
+		}
+
+		n->on_node_msg(msglen, msgbuf, &sin);
+	}
+	
+	FATAL("shouldnt get here");
+	//NET04_LOG("listen_dv: stop\n");
+} 
+
+void node::on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin) {
+	uint16_t type, len;
+	proto_base::header_t *hdr = (proto_base::header_t *) msg;	
+	node_id_t node_id;
+	char debug_log[256];
+
+	proto_base::ntoh_hdr(hdr);
+
+	type = proto_base::msg_type(msg);
+	len = proto_base::msg_len(msg);
+	node_id = proto_base::msg_node_id(msg);
+
+	sprintf(debug_log, "node %d DV: received %d byte '%s' (%d) message from node %d (%s:%d)\n", m_node_id, msglen, proto_node::type_to_str(type), type, node_id, inet_ntoa(sin->sin_addr), ntohs(sin->sin_port));
 	
 
-	NET04_LOG("listen_dv: stop\n");
-} 
+	switch(type) {
+		case proto_node::TYPE_FWD_MSG :
+			NET04_LOG(debug_log);
+			on_fwd_message(msg, msglen);
+			break;
+
+		case proto_node::TYPE_ROUTE_INFO :
+			NET04_LOG("*");//NET04_LOG(debug_log);
+			on_route_info(msg, msglen);
+			break;
+
+		default:
+			NET04_LOG(debug_log);
+			printf("unknown message type %d: ", type);
+			print_hex_bytes(msg, msglen); printf("\n");
+	}
+}
+
+void node::on_fwd_message(char *msg, int msglen) const {
+	proto_node::ntoh_msg_hdr((proto_node::msg_header_t *) msg + sizeof(proto_base::header_t) );
+	
+	forward(msg, msglen);
+}
+
+void node::on_route_info(char *msg, int msglen) {
+	proto_base::header_t *hdr = (proto_base::header_t *) msg;
+	fwd_entry_t *entry = (fwd_entry_t *) (msg + sizeof(proto_base::header_t) );
+	node_id_t from;
+	link_map_t::const_iterator link_it, from_link;
+	dv_map_t::const_iterator dv_it;
+	cost_t aggr_cost;
+
+	from = proto_base::msg_node_id(msg);
+	
+	if( (from_link = m_links.find(from) ) == m_links.end() ) {
+		FATAL("why am i getting a fwd entry from a node i dont have a link with?");
+	}
+
+	aggr_cost = from_link->second.second + entry->cost;
+	//NET04_LOG("\tnew route info: on %d --(%d + %d)--> %d\n", from, from_link->second.second, entry->cost, entry->id);
+		
+	if( (link_it = m_links.find(entry->id) ) != m_links.end() ) {
+		if(link_it->second.second <= (aggr_cost) ) { 
+			//NET04_LOG("\talready have a link with lower cost to node %d. ignoring route info\n", entry->id);
+			return;
+		} // else keep going to see if we have a better route already in our table
+	}
+
+	if( (dv_it = m_dv_table.find(entry->id) ) != m_dv_table.end() ) {
+		if(dv_it->second.cost <= (aggr_cost) ) {
+			//NET04_LOG("\talready have a route with lower cost to node %d. ignoring route info\n", entry->id);
+			return;
+		} // else keep going and store this route
+	}
+
+	/* we dont have a route to this node yet, so store this route */
+	m_dv_table[entry->id].cost = aggr_cost;
+	m_dv_table[entry->id].id = from;
+	
+	NET04_LOG("\tstored route info to %d at cost %d on link %d...\n", entry->id, aggr_cost, from);	
+}
+
+void node::route_bcast() const {
+	link_map_t::const_iterator it;
+
+	for(it = m_links.begin(); it != m_links.end(); it++) {
+		send_routes(it->first);
+	}
+}
+
+void node::send_routes(node_id_t node_id) const {
+	dv_map_t::const_iterator it;
+	link_map_t::const_iterator link_it;
+	fwd_entry_t route;
+
+	for(link_it = m_links.begin(); link_it != m_links.end(); link_it++) {
+		if(link_it->first == node_id) { /* dont tell a node about my link to it :) */
+			continue;
+		}
+
+		route.id = link_it->first;
+		route.cost = link_it->second.second;
+
+		send_route(node_id, &route);
+	}
+
+	for(it = m_dv_table.begin(); it != m_dv_table.end(); it++) {
+		if(it->second.id == node_id) { /* dont tell this node about routes it gives me */
+			continue;
+		}
+		
+		route.id = it->first;
+		route.cost = it->second.cost;
+
+		send_route(node_id, &route);
+	}
+}
+
+void node::send_route(node_id_t node_id, const fwd_entry_t *route) const {
+	int size = sizeof(proto_base::header_t) + sizeof(fwd_entry_t);
+	char buf[size];
+	proto_base::header_t *hdr = (proto_base::header_t *) buf;
+	fwd_entry_t *r = (fwd_entry_t *) (buf + sizeof(proto_base::header_t) );
+
+	proto_node::route_info(hdr, m_node_id);
+
+	r->id = route->id;
+	r->cost = route->cost;
+
+	send_link_msg(node_id, buf, size);
+}

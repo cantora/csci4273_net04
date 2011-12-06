@@ -35,7 +35,7 @@ class node {
 		static void listen_dv(void *instance);
 		
 	private:
-		void forward(const char *msg, int msglen) const;
+		void forward(char *msg, int msglen) const;
 
 		node_id_t next_hop(node_id_t dest) const;
 		
@@ -44,6 +44,15 @@ class node {
 		void send_coord_msg(const char *buf, int buflen) const;
 		void send_msg(int socket, const struct sockaddr_in *sin, const char *buf, int buflen) const;
 		void request_coord_init() const;
+
+		void route_bcast() const;
+		void send_routes(node_id_t node_id) const;
+		void send_route(node_id_t node_id, const fwd_entry_t *route) const;
+
+		void on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin);
+		void on_fwd_message(char *msg, int msglen) const;
+		void on_route_info(char *msg, int msglen);
+
 
 		void on_coord_msg(int msglen, char *msg);
 		void on_request_table() const;
@@ -62,7 +71,9 @@ class node {
 		int m_coord_socket;
 		struct sockaddr_in *const m_coord_sin;
 
-		std::map<node_id_t, fwd_entry_t > m_dv_table;
+		/* key is destination node and value is a pair of link+cost of the aggregate links to node */
+		typedef std::map<node_id_t, fwd_entry_t > dv_map_t;
+		dv_map_t m_dv_table;
 	
 		typedef std::map<node_id_t, std::pair<struct sockaddr_in, cost_t> > link_map_t;
 		link_map_t m_links;

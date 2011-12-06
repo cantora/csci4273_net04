@@ -291,7 +291,7 @@ void coord::on_req_init(node_id_t node_id, const char *msg, const struct sockadd
 
 		m_nodes[node_id].coord_sin = *sin;
 		
-		m_nodes[node_id].dv_sin.sin_addr.s_addr = ld->s_addr;
+		m_nodes[node_id].dv_sin.sin_addr.s_addr = sin->sin_addr.s_addr;
 		m_nodes[node_id].dv_sin.sin_port = ld->port;
 		m_nodes[node_id].dv_sin.sin_family = AF_INET;
 	
@@ -299,7 +299,8 @@ void coord::on_req_init(node_id_t node_id, const char *msg, const struct sockadd
 			FATAL("got contradictory registration info");
 		}
 
-		NET04_LOG("reply reg_ack (network size: %d)\n", m_nodes.size());
+		NET04_LOG("registered node address %s:%d\n", inet_ntoa(m_nodes[node_id].dv_sin.sin_addr), ntohs(m_nodes[node_id].dv_sin.sin_port));
+		print_hex_bytes(msg, 14); printf("\n");
 		reply_reg_ack(node_id);
 		//send_table(node_id);
 		m_last_reg = time(NULL);

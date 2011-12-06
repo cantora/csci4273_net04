@@ -11,7 +11,8 @@ namespace proto_node {
 	static const int max_msg_len = 1024;
 	static const int max_route_size = 10;	
 	
-	static const uint16_t TYPE_SND_MSG = 1;
+	static const uint16_t TYPE_FWD_MSG = 1;
+	static const uint16_t TYPE_ROUTE_INFO = 2;
 
 	struct msg_header_t {
 		uint32_t msg_id;
@@ -19,6 +20,8 @@ namespace proto_node {
 		node_id_t dest;
 		node_id_t route[max_route_size];
 	};
+
+	void route_info(proto_base::header_t *hdr, node_id_t id);
 
 	const char *type_to_str(uint16_t type);
 	void print_msg(const char *buf);

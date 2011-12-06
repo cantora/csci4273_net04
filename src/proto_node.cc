@@ -6,6 +6,12 @@
 
 using namespace net04;
 
+void proto_node::route_info(proto_base::header_t *hdr, node_id_t id) {
+	hdr->type = TYPE_ROUTE_INFO;
+	hdr->msg_len = sizeof(fwd_entry_t);
+	hdr->id = id;
+}
+
 void proto_node::print_msg(const char *buf) {
 	uint16_t msglen = proto_base::msg_len(buf) - sizeof(msg_header_t);
 	const char *msg = buf + sizeof(proto_base::header_t) + sizeof(msg_header_t);
@@ -70,8 +76,11 @@ void proto_node::ntoh_msg_hdr(msg_header_t *hdr) {
 const char *proto_node::type_to_str(uint16_t type) {
 	
 	switch(type) {
-		case TYPE_SND_MSG :
-			return "snd_msg";
+		case TYPE_FWD_MSG :
+			return "fwd_msg";
+			break;
+		case TYPE_ROUTE_INFO : 
+			return "route_info";
 			break;
 		default:
 			return "unknown type";
