@@ -132,7 +132,7 @@ void do_link_fail(coord *c, char *str) {
 		return;
 	}
 
-	cost_change(c, arr[0], arr[1], 0);
+	cost_change(c, arr[0], arr[1], node::INF_COST);
 }
 
 void do_print_table(coord *c, char *str) {

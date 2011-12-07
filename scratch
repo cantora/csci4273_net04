@@ -42,3 +42,27 @@
 			}
 
 		};
+
+
+
+void node::on_link_update(proto_base::header_t *hdr, uint16_t msg_len, int buflen, const char *buf) {
+	proto_coord::link_desc_t *ld;
+	link_map_t::iterator it;
+	bool deleted = false;
+
+	if(msg_len != sizeof(proto_coord::link_desc_t) ) {
+		FATAL("unexpected size of link update message");
+	}
+
+	ld = (proto_coord::link_desc_t *) (buf + sizeof(proto_base::header_t));
+	
+	m_links[ld->id].second = ld->cost;
+	memset(&m_links[ld->id].first, 0, sizeof(struct sockaddr_in) );
+	m_links[ld->id].first.sin_addr.s_addr = ld->s_addr;
+	m_links[ld->id].first.sin_port = ld->port;
+	m_links[ld->id].first.sin_family = AF_INET;
+	
+	NET04_LOG("node %d: updated link to node %d (%s:%d) with cost %d\n", m_node_id, ld->id, inet_ntoa(m_links[ld->id].first.sin_addr), ntohs(m_links[ld->id].first.sin_port), ld->cost);
+}
+
+

@@ -109,6 +109,10 @@ int coord::link_cost_change(node_id_t n1, node_id_t n2, cost_t cost) {
 	edge e(n1, n2);
 	map<edge, cost_t>::iterator it;
 
+	if(cost < 1) {
+		FATAL("invalid cost");
+	}
+
 	it = m_edges.find(e);
 	
 	if(it == m_edges.end() ) {
@@ -186,7 +190,11 @@ void coord::print_tbl_upd_msg() const {
 	printf("\t+---------------------\n");
 	for(i = 0; i < entries; i++) {
 		//if(tinfo[i].dest == tinfo[i].link.id) printf("*");
-		printf("\t+%d\t+%d\t+%d\n", tinfo[i].dest, tinfo[i].link.id, tinfo[i].link.cost);
+		printf("\t+%d\t+", tinfo[i].dest);
+		(tinfo[i].link.id == 0)? printf("X") : printf("%d", tinfo[i].link.id);
+		printf("\t+");
+		(tinfo[i].link.cost >= node::INF_COST)? printf("X") : printf("%d", tinfo[i].link.cost);
+		printf("\n");
 	}	
 }
 
@@ -512,6 +520,9 @@ void coord::send_msg(char *buf, int buflen, const struct sockaddr_in *sin) const
 bool coord::add_edge(const edge &e, cost_t cost) {
 	pair<map<edge, cost_t>::iterator,bool> ret;
 
+	if(cost < 1) {
+		FATAL("invalid cost");
+	}
 	ret = m_edges.insert(make_pair(e, cost) );
 
 	return ret.second;

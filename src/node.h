@@ -25,7 +25,7 @@ namespace net04 {
 class node {
 	public:
 		
-		static const cost_t INF_COST = 0x00;		
+		static const cost_t INF_COST = 0xF0;
 		
 		node(node_id_t node_id, const struct sockaddr_in *coord_addr, 
 			struct sockaddr_in *coord_sin, struct sockaddr_in *dv_sin);

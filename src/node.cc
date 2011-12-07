@@ -229,7 +229,7 @@ node_id_t node::next_hop(node_id_t dest) const {
 
 	dv_it = m_dv_table.find(dest);
 
-	if(dv_it == m_dv_table.end() ) {
+	if( (dv_it == m_dv_table.end() ) || (dv_it->second.cost >= INF_COST) ) {
 		return 0;
 	}
 
@@ -261,7 +261,9 @@ void node::on_message_receive(const char *msg, int msglen) const {
 void node::on_link_update(proto_base::header_t *hdr, uint16_t msg_len, int buflen, const char *buf) {
 	proto_coord::link_desc_t *ld;
 	link_map_t::iterator it;
+	dv_map_t::iterator dv_it;
 	bool deleted = false;
+	int diff;
 
 	if(msg_len != sizeof(proto_coord::link_desc_t) ) {
 		FATAL("unexpected size of link update message");
@@ -269,9 +271,21 @@ void node::on_link_update(proto_base::header_t *hdr, uint16_t msg_len, int bufle
 
 	ld = (proto_coord::link_desc_t *) (buf + sizeof(proto_base::header_t));
 
-	if(ld->cost == 0) {
+	if(ld->cost >= INF_COST) {
 		if( (it = m_links.find(ld->id) ) != m_links.end() ) {
-			m_links.erase(it);
+			m_links.erase(it); // erase from the links table.
+
+			/* kill all the routes we got through this node */
+			for(dv_it = m_dv_table.begin(); dv_it != m_dv_table.end(); dv_it++) {
+				if(dv_it->second.id == ld->id) {
+					dv_it->second.cost = INF_COST;
+				}
+			}
+
+			/* set a route with INF_COST so that we advertise the fact that this link is dead */
+			m_dv_table[ld->id].cost = INF_COST;
+			m_dv_table[ld->id].id = 0; /* dummy node id */
+
 			deleted = true;
 		}
 		else {
@@ -280,14 +294,27 @@ void node::on_link_update(proto_base::header_t *hdr, uint16_t msg_len, int bufle
 		}
 	}
 	else {
+		/* if cost is bigger, we will add +diff to our routes
+		 * if smaller, we add -diff to our routes
+		 */
+		diff = ld->cost - m_links[ld->id].second; 
 		m_links[ld->id].second = ld->cost;
 		memset(&m_links[ld->id].first, 0, sizeof(struct sockaddr_in) );
 		m_links[ld->id].first.sin_addr.s_addr = ld->s_addr;
 		m_links[ld->id].first.sin_port = ld->port;
 		m_links[ld->id].first.sin_family = AF_INET;
+
+		for(dv_it = m_dv_table.begin(); dv_it != m_dv_table.end(); dv_it++) {
+			if(dv_it->second.id == ld->id) {
+				if(diff + (int) dv_it->second.cost < 1) {
+					FATAL("cost is negative?");
+				}
+				dv_it->second.cost = (diff + (int) dv_it->second.cost > INF_COST) ? INF_COST : diff + dv_it->second.cost;
+			}
+		}
 	}
 
-	NET04_LOG("node %d: %s link to node %d", m_node_id, (deleted? "removed" : "added"), ld->id);
+	NET04_LOG("node %d: %s link to node %d", m_node_id, (deleted? "removed" : "updated"), ld->id);
 	if(!deleted) {
 		NET04_LOG(" (%s:%d) with cost %d", inet_ntoa(m_links[ld->id].first.sin_addr), ntohs(m_links[ld->id].first.sin_port), ld->cost);
 	}
@@ -428,6 +455,7 @@ void node::on_route_info(char *msg, int msglen) {
 	link_map_t::const_iterator link_it, from_link;
 	dv_map_t::const_iterator dv_it;
 	cost_t aggr_cost;
+	bool is_update = false;
 
 	from = proto_base::msg_node_id(msg);
 	
@@ -435,28 +463,36 @@ void node::on_route_info(char *msg, int msglen) {
 		FATAL("why am i getting a fwd entry from a node i dont have a link with?");
 	}
 
-	aggr_cost = from_link->second.second + entry->cost;
+	aggr_cost = ( (unsigned int) from_link->second.second + (unsigned int) entry->cost > INF_COST)? INF_COST : (from_link->second.second + entry->cost);
+	
 	//NET04_LOG("\tnew route info: on %d --(%d + %d)--> %d\n", from, from_link->second.second, entry->cost, entry->id);
 		
 	if( (link_it = m_links.find(entry->id) ) != m_links.end() ) {
-		if(link_it->second.second <= (aggr_cost) ) { 
+		return; // not gonna store routes to nodes im directly linked with to simplify implementation
+		/*if(link_it->second.second <= (aggr_cost) ) { 
 			//NET04_LOG("\talready have a link with lower cost to node %d. ignoring route info\n", entry->id);
 			return;
 		} // else keep going to see if we have a better route already in our table
+		*/
 	}
 
 	if( (dv_it = m_dv_table.find(entry->id) ) != m_dv_table.end() ) {
-		if(dv_it->second.cost <= (aggr_cost) ) {
+		is_update = (dv_it->second.id == from) && (dv_it->second.cost != aggr_cost);
+		/* if this node is NOT updating us on a change in cost 
+		 * and this route is worse than another route we have
+		 * already, we can ignore this info	
+		 */
+		if(!is_update && (dv_it->second.cost <= (aggr_cost) ) ) { 
 			//NET04_LOG("\talready have a route with lower cost to node %d. ignoring route info\n", entry->id);
 			return;
 		} // else keep going and store this route
 	}
 
-	/* we dont have a route to this node yet, so store this route */
+	/* we like this route or this an update */
 	m_dv_table[entry->id].cost = aggr_cost;
 	m_dv_table[entry->id].id = from;
 	
-	NET04_LOG("\tstored route info to %d at cost %d on link %d...\n", entry->id, aggr_cost, from);	
+	NET04_LOG("\t%s route info to %d at cost %d on link %d...\n", (is_update? "updated" : "stored"), entry->id, aggr_cost, from);	
 }
 
 void node::route_bcast() const {
@@ -473,7 +509,7 @@ void node::send_routes(node_id_t node_id) const {
 	fwd_entry_t route;
 
 	for(link_it = m_links.begin(); link_it != m_links.end(); link_it++) {
-		if(link_it->first == node_id) { /* dont tell a node about my link to it :) */
+		if(link_it->first == node_id) { /* dont tell THE node about my link to it :) */
 			continue;
 		}
 
