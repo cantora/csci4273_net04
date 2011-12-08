@@ -1,0 +1,300 @@
+cantora@elra-04:~/networks/net04$ ./start_coord 1.2.7 1.3.11 1.4.2 1.6.13 1.7.6 2.3.4 3.7.12 3.4.6 4.6.1 4.5.3 5.7.9 5.6.15 6.7.7
+listen_node: start
+add edge: 1<-(7)->2
+add edge: 1<-(11)->3
+add edge: 1<-(2)->4
+add edge: 1<-(13)->6
+add edge: 1<-(6)->7
+add edge: 2<-(4)->3
+add edge: 3<-(12)->7
+add edge: 3<-(6)->4
+add edge: 4<-(1)->6
+add edge: 4<-(3)->5
+add edge: 5<-(9)->7
+add edge: 5<-(15)->6
+add edge: 6<-(7)->7
+port: 54545
+waited too long for nodes, send reset...
+received 14 byte 'request_init' message from 128.138.202.22:52652 (1). registered node address 128.138.202.22:54938
+0x01 0x00 0x08 0x00 0x01 0x00 0x00 0x00 0x00 0x00 0x01 0x00 0xffffffd6 0xffffff9a
+received 14 byte 'request_init' message from 128.138.202.22:44506 (2). registered node address 128.138.202.22:57549
+0x01 0x00 0x08 0x00 0x02 0x00 0x00 0x00 0x00 0x00 0x02 0x00 0xffffffe0 0xffffffcd
+received 14 byte 'request_init' message from 128.138.202.22:50354 (3). registered node address 128.138.202.22:53208
+0x01 0x00 0x08 0x00 0x03 0x00 0x00 0x00 0x00 0x00 0x03 0x00 0xffffffcf 0xffffffd8
+received 14 byte 'request_init' message from 128.138.202.22:35695 (4). registered node address 128.138.202.22:44494
+0x01 0x00 0x08 0x00 0x04 0x00 0x00 0x00 0x00 0x00 0x04 0x00 0xffffffad 0xffffffce
+received 14 byte 'request_init' message from 128.138.202.22:53582 (5). registered node address 128.138.202.22:40152
+0x01 0x00 0x08 0x00 0x05 0x00 0x00 0x00 0x00 0x00 0x05 0x00 0xffffff9c 0xffffffd8
+received 14 byte 'request_init' message from 128.138.202.22:55164 (6). registered node address 128.138.202.22:58405
+0x01 0x00 0x08 0x00 0x06 0x00 0x00 0x00 0x00 0x00 0x06 0x00 0xffffffe4 0x25
+received 14 byte 'request_init' message from 128.138.202.22:34731 (7). registered node address 128.138.202.22:38511
+0x01 0x00 0x08 0x00 0x07 0x00 0x00 0x00 0x00 0x00 0x07 0x00 0xffffff96 0x6f
+initialize links with nodes
+send cost change to node 1: {:n1 => 1, :n2 => 2, :cost => 7}
+send cost change to node 1: {:n1 => 1, :n2 => 3, :cost => 11}
+send cost change to node 1: {:n1 => 1, :n2 => 4, :cost => 2}
+send cost change to node 1: {:n1 => 1, :n2 => 6, :cost => 13}
+send cost change to node 1: {:n1 => 1, :n2 => 7, :cost => 6}
+send cost change to node 2: {:n1 => 1, :n2 => 2, :cost => 7}
+send cost change to node 2: {:n1 => 2, :n2 => 3, :cost => 4}
+send cost change to node 3: {:n1 => 1, :n2 => 3, :cost => 11}
+send cost change to node 3: {:n1 => 2, :n2 => 3, :cost => 4}
+send cost change to node 3: {:n1 => 3, :n2 => 4, :cost => 6}
+send cost change to node 3: {:n1 => 3, :n2 => 7, :cost => 12}
+send cost change to node 4: {:n1 => 1, :n2 => 4, :cost => 2}
+send cost change to node 4: {:n1 => 3, :n2 => 4, :cost => 6}
+send cost change to node 4: {:n1 => 4, :n2 => 5, :cost => 3}
+send cost change to node 4: {:n1 => 4, :n2 => 6, :cost => 1}
+send cost change to node 5: {:n1 => 4, :n2 => 5, :cost => 3}
+send cost change to node 5: {:n1 => 5, :n2 => 6, :cost => 15}
+send cost change to node 5: {:n1 => 5, :n2 => 7, :cost => 9}
+send cost change to node 6: {:n1 => 1, :n2 => 6, :cost => 13}
+send cost change to node 6: {:n1 => 4, :n2 => 6, :cost => 1}
+send cost change to node 6: {:n1 => 5, :n2 => 6, :cost => 15}
+send cost change to node 6: {:n1 => 6, :n2 => 7, :cost => 7}
+send cost change to node 7: {:n1 => 1, :n2 => 7, :cost => 6}
+send cost change to node 7: {:n1 => 3, :n2 => 7, :cost => 12}
+send cost change to node 7: {:n1 => 5, :n2 => 7, :cost => 9}
+send cost change to node 7: {:n1 => 6, :n2 => 7, :cost => 7}
+all nodes registered. network is ready...
+command usage:
+        c NODE1 NODE2 COST              cost change
+        f NODE1 NODE2                   link failure
+        p NODE                          print forwarding table of NODE
+        a                               print forwarding table of all nodes
+        s NODE1 NODE2 DATA              send DATA message from NODE1 to NODE2
+        r                               reset nodes and exit
+        h                               print this message
+> a
+node 1:
+        +-dest  +link   +cost
+        +---------------------
+        +2      +2      +7
+        +3      +3      +11
+        +4      +4      +2
+        +6      +6      +13
+        +7      +7      +6
+        +5      +4      +5
+node 2:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +7
+        +3      +3      +4
+        +4      +1      +9
+        +5      +1      +12
+        +6      +3      +11
+        +7      +1      +13
+node 3:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +11
+        +2      +2      +4
+        +4      +4      +6
+        +7      +7      +12
+        +5      +4      +9
+        +6      +4      +7
+node 4:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +2
+        +3      +3      +6
+        +5      +5      +3
+        +6      +6      +1
+        +2      +1      +9
+        +7      +1      +8
+node 5:
+        +-dest  +link   +cost
+        +---------------------
+        +4      +4      +3
+        +6      +6      +15
+        +7      +7      +9
+        +1      +4      +5
+        +2      +4      +12
+        +3      +4      +9
+node 6:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +13
+        +4      +4      +1
+        +5      +5      +15
+        +7      +7      +7
+        +2      +4      +10
+        +3      +4      +7
+node 7:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +6
+        +3      +3      +12
+        +5      +5      +9
+        +6      +6      +7
+        +2      +1      +13
+        +4      +1      +8
+> s 1 5 message:1-5-1
+send message from node 1 to node 5: message:1-5-1
+
+reply from node 5: fwd_ack (11)
+message info: msg_id = 0
+route: 1 --> 4 --> 5
+> s 2 3 message:2-3-1
+send message from node 2 to node 3: message:2-3-1
+
+reply from node 3: fwd_ack (11)
+message info: msg_id = 1
+route: 2 --> 3
+> 2 5 message:2-5-1
+unknown command: 2 5 message:2-5-1
+> s 2 5 message:2-5-1
+send message from node 2 to node 5: message:2-5-1
+
+reply from node 5: fwd_ack (11)
+message info: msg_id = 2
+route: 2 --> 1 --> 4 --> 5
+> s 1 5 message:1-5-2
+send message from node 1 to node 5: message:1-5-2
+
+reply from node 5: fwd_ack (11)
+message info: msg_id = 3
+route: 1 --> 4 --> 5
+> c 1 4 10
+send cost change to node 1: {:n1 => 1, :n2 => 4, :cost => 10}
+send cost change to node 4: {:n1 => 1, :n2 => 4, :cost => 10}
+notified network of link change
+> p 1
+node 1:
+        +-dest  +link   +cost
+        +---------------------
+        +2      +2      +7
+        +3      +3      +11
+        +4      +4      +10
+        +6      +6      +13
+        +7      +7      +6
+        +5      +4      +13
+> p 4
+node 4:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +10
+        +3      +3      +6
+        +5      +5      +3
+        +6      +6      +1
+        +2      +3      +10
+        +7      +6      +8
+> p 3
+node 3:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +11
+        +2      +2      +4
+        +4      +4      +6
+        +7      +7      +12
+        +5      +4      +9
+        +6      +4      +7
+> c 5 6 1
+send cost change to node 5: {:n1 => 5, :n2 => 6, :cost => 1}
+send cost change to node 6: {:n1 => 5, :n2 => 6, :cost => 1}
+notified network of link change
+> p 5
+node 5:
+        +-dest  +link   +cost
+        +---------------------
+        +4      +4      +3
+        +6      +6      +1
+        +7      +7      +9
+        +1      +4      +13
+        +2      +6      +12
+        +3      +6      +8
+> p 6
+node 6:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +13
+        +4      +4      +1
+        +5      +5      +1
+        +7      +7      +7
+        +2      +4      +11
+        +3      +4      +7
+> p 4
+node 4:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +10
+        +3      +3      +6
+        +5      +5      +3
+        +6      +6      +1
+        +2      +3      +10
+        +7      +6      +8
+> f 1 4
+send cost change to node 1: {:n1 => 1, :n2 => 4, :cost => 240}
+send cost change to node 4: {:n1 => 1, :n2 => 4, :cost => 240}
+notified network of link change
+> s 1 4 message:1-4-1
+send message from node 1 to node 4: message:1-4-1
+
+reply from node 4: fwd_ack (11)
+message info: msg_id = 4
+route: 1 --> 7 --> 6 --> 4
+> a
+node 1:
+        +-dest  +link   +cost
+        +---------------------
+        +2      +2      +7
+        +3      +3      +11
+        +6      +6      +13
+        +7      +7      +6
+        +4      +7      +14
+        +5      +6      +14
+node 2:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +7
+        +3      +3      +4
+        +4      +3      +10
+        +5      +3      +13
+        +6      +3      +11
+        +7      +1      +13
+node 3:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +11
+        +2      +2      +4
+        +4      +4      +6
+        +7      +7      +12
+        +5      +4      +9
+        +6      +4      +7
+node 4:
+        +-dest  +link   +cost
+        +---------------------
+        +3      +3      +6
+        +5      +5      +3
+        +6      +6      +1
+        +1      +6      +14
+        +2      +3      +10
+        +7      +6      +8
+node 5:
+        +-dest  +link   +cost
+        +---------------------
+        +4      +4      +3
+        +6      +6      +1
+        +7      +7      +9
+        +1      +6      +14
+        +2      +6      +12
+        +3      +6      +8
+node 6:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +13
+        +4      +4      +1
+        +5      +5      +1
+        +7      +7      +7
+        +2      +4      +11
+        +3      +4      +7
+node 7:
+        +-dest  +link   +cost
+        +---------------------
+        +1      +1      +6
+        +3      +3      +12
+        +5      +5      +9
+        +6      +6      +7
+        +2      +1      +13
+        +4      +6      +8
+> ^C

@@ -1,0 +1,29 @@
+networks programming assignment 4
+
+name: anthony cantor
+
+USAGE:
+> make start_coord
+> make start_node
+
+after everything builds, the quickest and easiest way to get up and running is to 
+start the coordinator. for example:
+./start_coord 1.10.11 1.2.7 2.3.4 3.5.6 5.10.2 10.9.6 10.7.12 9.7.13 9.6.7 6.7.15 6.4.9 4.8.7 8.2.1
+
+(each argument is an edge in the graph NODE.NODE.COST)
+the coordinator will start up and wait for nodes to register. next you can move to a different terminal,
+possibly on a different elra and run
+
+> screen
+> bash screen_nodes.sh 10 54545 elra-04.cs.colorado.edu
+
+this script will open 10 nodes (the above network needs ten nodes) in ten different screen windows. each 
+node will connect to elra-04 on port 54545.
+
+the nodes and coord will get setup and you can go back to the coord terminal and enter commands.
+
+NOTES ON IMPLEMENTATION:
+i implemented distance vector routing with split horizon (and poison reverse). however one thing i 
+should point out is that i have each node prefer direct links if possible even if there is a
+cheaper indirect route. i did this mostly to simplify my implementation and avoid loops.
+
