@@ -56,6 +56,16 @@ int proto_node::mhdr_add_to_route_list(char *buf, node_id_t node_id) {
 	return i;
 }
 
+void proto_node::mhdr_print_route_list(char *buf) {
+	msg_header_t *mhdr = (msg_header_t *) (buf + sizeof(proto_base::header_t) );
+	int i;
+
+	for(i = 0; (i < max_route_size) && (mhdr->route[i] != 0); i++) {
+		printf("%d --> ", mhdr->route[i]);
+	}
+
+}
+
 void proto_node::mhdr_zero_route_list(char *buf) {
 	msg_header_t *mhdr = (msg_header_t *) (buf + sizeof(proto_base::header_t) );
 	memset(mhdr->route, 0, max_route_size);

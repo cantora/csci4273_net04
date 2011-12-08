@@ -30,6 +30,7 @@ namespace proto_node {
 	node_id_t mhdr_src(const char *buf);
 	node_id_t mhdr_dest(const char *buf);
 	int mhdr_add_to_route_list(char *buf, node_id_t node_id);
+	void mhdr_print_route_list(char *buf);
 	void mhdr_zero_route_list(char *buf);
 	
 	void hton_msg_hdr(msg_header_t *hdr);

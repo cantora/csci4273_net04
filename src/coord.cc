@@ -73,8 +73,13 @@ int coord::send(int timeout, node_id_t src, node_id_t dest, const char *msg, int
 void coord::print_fwd_reply_info() const {
 	node_id_t id = proto_base::msg_node_id(m_send_reply);
 	uint16_t type = proto_base::msg_type(m_send_reply);
+	//proto_node::msg_header_t *mhdr = (proto_node::msg_header_t *) (m_send_reply + sizeof(proto_node::header_t) );
 
-	printf("reply from node %d: %s (%d)\n", id, proto_coord::type_to_str(type), type);	
+	printf("reply from node %d: %s (%d)\n", id, proto_coord::type_to_str(type), type);
+	printf("message info: msg_id = %d\n", proto_node::mhdr_msg_id(m_send_reply) ); 
+	printf("route: "); 
+	proto_node::mhdr_print_route_list(m_send_reply);
+	printf("%d\n", proto_node::mhdr_dest(m_send_reply) );
 }
 
 void coord::send_message(node_id_t src, node_id_t dest, const char *msg, int msglen) const {

@@ -17,6 +17,8 @@ node::node(node_id_t node_id, const struct sockaddr_in *coord_addr,
 	m_dv_socket = sock::bound_udp_socket(m_dv_sin);
 	m_coord_socket = sock::bound_udp_socket(m_coord_sin);
 
+	pthread_mutex_init(&m_route_mtx, NULL);
+
 	while(m_pool->dispatch_thread(listen_coord, this, NULL) != 0) {
 		usleep(1000);
 	}
@@ -29,28 +31,24 @@ node::node(node_id_t node_id, const struct sockaddr_in *coord_addr,
 node::~node() {
 	delete m_pool;
 	
+	pthread_mutex_destroy(&m_route_mtx);
+
 	close(m_dv_socket);
 	close(m_coord_socket);
 }
 
-void node::send_coord_fwd_ack(uint32_t msg_id, uint16_t type) const {
-	int size = sizeof(proto_base::header_t) + 4;
-	char buf[size];
-	proto_base::header_t *hdr = (proto_base::header_t *) buf;
-	
+void node::send_coord_fwd_ack(const char *msg, int msglen, uint16_t type) const {
+	proto_base::header_t *hdr = (proto_base::header_t *) msg;	
+
 	if( type != proto_coord::TYPE_FWD_ERR && type != proto_coord::TYPE_FWD_ACK) {
 		FATAL("invalid fwd ack type");
 	}
-
-	NET04_LOG("node %d: fwd ack %s for msg_id %d to coord\n", m_node_id, proto_coord::type_to_str(type), msg_id);
+	NET04_LOG("node %d: fwd ack %s for msg_id %d to coord\n", m_node_id, proto_coord::type_to_str(type), proto_node::mhdr_msg_id(msg));
 
 	hdr->id = m_node_id;
 	hdr->type = type;
-	hdr->msg_len = 4;
 	
-	*( (uint32_t *) (buf + sizeof(proto_base::header_t) ) ) = msg_id;
-
-	send_coord_msg(buf, size);
+	send_coord_msg(msg, msglen);
 }
 
 void node::send_coord_msg(const char *buf, int buflen) const {
@@ -143,21 +141,29 @@ void node::on_coord_msg(int msglen, char *msg) {
 			break;
 
 		case proto_coord::TYPE_NET_RST :
+			route_lock();
 			m_dv_table.clear();
 			m_links.clear();
 			m_registered = false;
+			route_unlock();
 			break;
 
 		case proto_coord::TYPE_LNK_UPD :
+			route_lock();
 			on_link_update(hdr, len, msglen, msg);			
+			route_unlock();
 			break;
 
 		case proto_coord::TYPE_REQ_TBL :
+			route_lock();
 			on_request_table();			
+			route_unlock();
 			break;
 
 		case proto_coord::TYPE_SND_MSG : 
+			route_lock();
 			on_send_message(msg, msglen);
+			route_unlock();
 			break;
 
 		case proto_coord::TYPE_ERR : 
@@ -168,6 +174,14 @@ void node::on_coord_msg(int msglen, char *msg) {
 			printf("unknown message type %d: ", type);
 			print_hex_bytes(msg, msglen); printf("\n");
 	}
+}
+
+void node::route_lock() {
+	p_mutex_lock(&m_route_mtx);
+}
+
+void node::route_unlock() {
+	p_mutex_unlock(&m_route_mtx);
 }
 
 void node::on_send_message(char *msg, int msglen) const {
@@ -193,20 +207,24 @@ void node::forward(char *msg, int msglen) const {
 	//src = proto_node::mhdr_src(msg);
 	if(dest == m_node_id) {
 		on_message_receive(msg, msglen);
-		send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ACK);
+		//send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ACK);
+		send_coord_fwd_ack(msg, msglen, proto_coord::TYPE_FWD_ACK);
 		return;
 	}
 
 	hdr->id = m_node_id;
 	hdr->type = proto_node::TYPE_FWD_MSG;
 	
-	proto_node::mhdr_add_to_route_list(msg, m_node_id);
+	if(proto_node::mhdr_add_to_route_list(msg, m_node_id) < 0) {
+		FATAL("message exceeded hop maximum");
+	}
 
 	nh = next_hop(dest);
 
 	if(nh == 0) {
 		NET04_LOG("node %d: could not find route to node %d\n", m_node_id, dest);
-		send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ERR);
+		//send_coord_fwd_ack(proto_node::mhdr_msg_id(msg), proto_coord::TYPE_FWD_ERR);
+		send_coord_fwd_ack(msg, msglen, proto_coord::TYPE_FWD_ERR);
 		return;
 	}
 
@@ -427,12 +445,16 @@ void node::on_node_msg(int msglen, char *msg, const struct sockaddr_in *sin) {
 	switch(type) {
 		case proto_node::TYPE_FWD_MSG :
 			NET04_LOG(debug_log);
+			route_lock();
 			on_fwd_message(msg, msglen);
+			route_unlock();
 			break;
 
 		case proto_node::TYPE_ROUTE_INFO :
 			NET04_LOG("*");//NET04_LOG(debug_log);
+			route_lock();
 			on_route_info(msg, msglen);
+			route_unlock();
 			break;
 
 		default:
